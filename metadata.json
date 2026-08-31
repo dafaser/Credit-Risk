@@ -1,0 +1,6 @@
+{
+  "name": "BRI Credit Risk Management Dashboard",
+  "description": "Data Driven Risk Management Dashboard BFLP - Hari 2 Sesi 2: Pandas Fondasi Data Analysis untuk Anandafa Syukur Rizky",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
