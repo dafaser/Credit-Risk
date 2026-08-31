@@ -112,10 +112,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
       <div className="p-5 border-t border-slate-800 mt-auto bg-slate-900/50">
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center font-bold text-white text-xs shadow-md">
-            AS
+            BB
           </div>
           <div className="overflow-hidden">
-            <p className="text-xs font-semibold text-white truncate">Anandafa Syukur Rizky</p>
+            <p className="text-xs font-semibold text-white truncate">Barnacle Boy</p>
             <p className="text-[10px] text-slate-500 uppercase tracking-tighter truncate">BFLP Risk Management</p>
           </div>
         </div>

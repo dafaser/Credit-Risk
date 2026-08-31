@@ -22,6 +22,43 @@ import { PortfolioAnalysisView } from './components/PortfolioAnalysisView';
 import { DataCleaningView } from './components/DataCleaningView';
 import { ExportDataView } from './components/ExportDataView';
 
+const STORAGE_KEY_RAW = 'bri_credit_raw_dataset_v1';
+const STORAGE_KEY_SUMMARY = 'bri_credit_summary_v1';
+
+function saveDatasetToStorage(raw: RawCreditRecord[], summary: DatasetSummary) {
+  try {
+    localStorage.setItem(STORAGE_KEY_RAW, JSON.stringify(raw));
+    localStorage.setItem(STORAGE_KEY_SUMMARY, JSON.stringify(summary));
+  } catch (err) {
+    console.warn('Gagal menyimpan dataset ke localStorage (mungkin melebihi kuota kuota):', err);
+  }
+}
+
+function loadDatasetFromStorage(): { raw: RawCreditRecord[]; summary: DatasetSummary } | null {
+  try {
+    const rawStr = localStorage.getItem(STORAGE_KEY_RAW);
+    const summaryStr = localStorage.getItem(STORAGE_KEY_SUMMARY);
+    if (!rawStr || !summaryStr) return null;
+    const raw = JSON.parse(rawStr);
+    const summary = JSON.parse(summaryStr);
+    if (Array.isArray(raw) && raw.length > 0 && summary && summary.fileName) {
+      return { raw, summary };
+    }
+  } catch (err) {
+    console.warn('Gagal membaca dataset tersimpan dari localStorage:', err);
+  }
+  return null;
+}
+
+function clearDatasetFromStorage() {
+  try {
+    localStorage.removeItem(STORAGE_KEY_RAW);
+    localStorage.removeItem(STORAGE_KEY_SUMMARY);
+  } catch (err) {
+    console.warn('Gagal membersihkan dataset dari localStorage:', err);
+  }
+}
+
 export default function App() {
   const [activePage, setActivePage] = useState<ActivePage>('dashboard');
   const [rawRecords, setRawRecords] = useState<RawCreditRecord[]>([]);
@@ -33,9 +70,13 @@ export default function App() {
   const [loadError, setLoadError] = useState<string | null>(null);
 
   // Process raw records through data cleaning engine
-  const handleDataLoaded = useCallback((raw: RawCreditRecord[], summary: DatasetSummary) => {
+  const handleDataLoaded = useCallback((raw: RawCreditRecord[], summary: DatasetSummary, persist = true) => {
     setRawRecords(raw);
     setDatasetSummary(summary);
+    
+    if (persist) {
+      saveDatasetToStorage(raw, summary);
+    }
     
     // Run cleaning engine
     const { cleanedRecords: cleaned, stats } = cleanCreditData(raw);
@@ -45,7 +86,7 @@ export default function App() {
   }, []);
 
   // Load sample dataset (data_kredit_bri.csv)
-  const handleLoadSample = useCallback(async () => {
+  const handleLoadSample = useCallback(async (persist = true) => {
     setIsLoading(true);
     setLoadError(null);
     try {
@@ -115,7 +156,7 @@ export default function App() {
             dateColumnName: dateCol
           };
 
-          handleDataLoaded(raw, summary);
+          handleDataLoaded(raw, summary, persist);
           setIsLoading(false);
         },
         error: (err) => {
@@ -129,9 +170,20 @@ export default function App() {
     }
   }, [handleDataLoaded]);
 
-  // Automatically load the dataset on startup for immediate experience
+  // Check localStorage first on startup so user uploads persist across refreshes
   useEffect(() => {
-    handleLoadSample();
+    const saved = loadDatasetFromStorage();
+    if (saved && saved.raw && saved.raw.length > 0 && saved.summary) {
+      handleDataLoaded(saved.raw, saved.summary, false);
+    } else {
+      handleLoadSample(false);
+    }
+  }, [handleDataLoaded, handleLoadSample]);
+
+  // Reset to default dataset and remove local storage
+  const handleResetDefault = useCallback(() => {
+    clearDatasetFromStorage();
+    handleLoadSample(false);
   }, [handleLoadSample]);
 
   return (
@@ -150,7 +202,8 @@ export default function App() {
         <Header
           datasetSummary={datasetSummary}
           onOpenUpload={() => setIsUploadModalOpen(true)}
-          onLoadSample={handleLoadSample}
+          onLoadSample={() => handleLoadSample(true)}
+          onResetDefault={handleResetDefault}
           isLoading={isLoading}
         />
 
