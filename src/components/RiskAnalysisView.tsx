@@ -1,62 +1,47 @@
 import React, { useState, useMemo } from 'react';
 import { 
-  BarChart, 
-  Bar, 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
-  ResponsiveContainer, 
-  PieChart, 
-  Pie, 
-  Cell, 
-  Legend, 
-  LineChart, 
-  Line,
-  ScatterChart,
-  Scatter,
-  ZAxis
-} from 'recharts';
-import { 
-  ShieldAlert, 
+  BarChart3, 
   Filter, 
-  CheckCircle2, 
-  AlertTriangle, 
-  Building, 
+  TrendingUp, 
   HelpCircle, 
-  TrendingDown, 
-  TrendingUp,
   Layers,
-  Award,
-  Percent,
-  Check
+  Table as TableIcon,
+  PieChart as PieIcon,
+  ShieldAlert,
+  Sliders,
+  CheckCircle2,
+  Building,
+  ArrowDownUp
 } from 'lucide-react';
 import { CreditRecord, DatasetSummary } from '../types';
 import { 
   applyFilter1, 
   applyFilter2, 
   applyFilter3, 
-  getPortfolioRiskAggregates,
+  calculateBoxplotStats,
+  calculateCorrelationMatrix,
+  calculateBranchSegmentAggregates,
+  calculateSegmentPivotPD,
   formatCurrencyIDR, 
   formatPercentageIDR, 
+  formatPDScore,
   formatNumberIDR 
 } from '../utils/creditEngine';
+
+import { HistogramKDEChart } from './charts/HistogramKDEChart';
+import { CorrelationHeatmap } from './charts/CorrelationHeatmap';
+import { BoxplotChart } from './charts/BoxplotChart';
+import { StackedBarKolektibilitas } from './charts/StackedBarKolektibilitas';
+import { BubbleChartPDvsLGD } from './charts/BubbleChartPDvsLGD';
 
 interface RiskAnalysisViewProps {
   records: CreditRecord[];
   summary: DatasetSummary | null;
 }
 
-const COLORS_RISK = ['#10B981', '#3B82F6', '#F59E0B', '#EF4444'];
-const COLORS_NPL: { [key: string]: string } = {
-  'Rendah': '#10B981',
-  'Sedang-Rendah': '#3B82F6',
-  'Sedang-Tinggi': '#F59E0B',
-  'Tinggi': '#EF4444'
-};
-
 export const RiskAnalysisView: React.FC<RiskAnalysisViewProps> = ({ records, summary }) => {
-  const [activeTab, setActiveTab] = useState<'filters' | 'charts'>('filters');
+  const [activeTab, setActiveTab] = useState<'visualisasi' | 'filters' | 'agregasi'>('visualisasi');
+  const [boxplotGroup, setBoxplotGroup] = useState<'kategori_risiko' | 'segmen'>('kategori_risiko');
 
   // Filter 2 State: selected branches
   const availableBranches = useMemo(() => {
@@ -72,34 +57,12 @@ export const RiskAnalysisView: React.FC<RiskAnalysisViewProps> = ({ records, sum
   const filter2Results = useMemo(() => applyFilter2(records, selectedBranches), [records, selectedBranches]);
   const filter3Results = useMemo(() => applyFilter3(records), [records]);
 
-  // Risk aggregates for Chart 4 & 5
-  const riskAggregates = useMemo(() => getPortfolioRiskAggregates(records), [records]);
-
-  // Chart 1: Risk Category
-  const riskDistData = riskAggregates.map(r => ({
-    name: r.kategori_risiko,
-    count: r.jumlah_nasabah,
-    totalLoan: r.total_pinjaman
-  }));
-
-  // Chart 2: NPL Flag
-  const nplCounts: { [flag: string]: number } = { 'Rendah': 0, 'Sedang-Rendah': 0, 'Sedang-Tinggi': 0, 'Tinggi': 0 };
-  records.forEach(r => {
-    if (nplCounts[r.flag_npl] !== undefined) nplCounts[r.flag_npl]++;
-  });
-  const nplDistData = Object.keys(nplCounts).map(flag => ({
-    name: flag,
-    count: nplCounts[flag],
-    percentage: records.length > 0 ? (nplCounts[flag] / records.length) * 100 : 0
-  }));
-
-  // Chart 3: Status Kredit
-  const lancarCount = records.filter(r => r.status_kredit === 'Lancar').length;
-  const macetCount = records.filter(r => r.status_kredit === 'Macet').length;
-  const statusData = [
-    { name: 'Lancar', value: lancarCount, color: '#10B981' },
-    { name: 'Macet', value: macetCount, color: '#EF4444' }
-  ];
+  // Visualizations datasets
+  const pdValues = useMemo(() => records.map(r => r.pd_score), [records]);
+  const correlationMatrix = useMemo(() => calculateCorrelationMatrix(records), [records]);
+  const boxplotData = useMemo(() => calculateBoxplotStats(records, 'pd_score', boxplotGroup), [records, boxplotGroup]);
+  const branchSegmentAggs = useMemo(() => calculateBranchSegmentAggregates(records), [records]);
+  const pivotPDSegmen = useMemo(() => calculateSegmentPivotPD(records), [records]);
 
   const toggleBranch = (branch: string) => {
     setSelectedBranches(prev => 
@@ -109,117 +72,243 @@ export const RiskAnalysisView: React.FC<RiskAnalysisViewProps> = ({ records, sum
 
   return (
     <div className="space-y-6">
-      {/* Header */}
+      {/* Header Banner */}
       <div className="bg-[#0f172a] rounded-xl p-6 border border-slate-800 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
-            <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-rose-500/10 text-rose-400 border border-rose-500/20">
-              Risk Segmentation & Monitoring
+            <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-500/30">
+              Tugas 2 & Sesi 3-4 Hari 2
             </span>
-            <span className="text-xs text-slate-500 font-mono">Tugas Hari 2 Sesi 2</span>
+            <span className="text-xs text-slate-500 font-mono">BFLP Risk Management</span>
           </div>
-          <h2 className="text-lg font-semibold text-white mt-1">
-            Analisis Risiko Kredit & 3 Filter Tugas Pandas
+          <h2 className="text-lg font-bold text-white mt-1">
+            Visualisasi Risiko Kredit & Analisis Portofolio
           </h2>
           <p className="text-xs text-slate-400 mt-0.5">
-            Eksekusi filtering logis terarah pada sub-populasi debitur berisiko tinggi dan visualisasi matriks risiko.
+            Implementasi 5 visualisasi inti risiko kredit (Histogram+KDE, Heatmap Korelasi, Boxplot PD, Stacked Bar Kolektibilitas, Bubble Chart PD vs LGD), 3 Filter Pandas, dan Agregasi.
           </p>
         </div>
 
-        {/* Tab switcher */}
-        <div className="flex items-center bg-slate-900 p-1 rounded-xl border border-slate-800 self-start md:self-auto">
+        {/* Tab Switcher */}
+        <div className="flex items-center bg-slate-900 p-1 rounded-xl border border-slate-800 self-start md:self-auto shrink-0">
+          <button
+            id="tab-btn-visualisasi"
+            onClick={() => setActiveTab('visualisasi')}
+            className={`px-3.5 py-2 text-xs font-semibold rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${
+              activeTab === 'visualisasi' 
+                ? 'bg-blue-600 text-white shadow-sm' 
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <BarChart3 className="w-3.5 h-3.5" />
+            <span>5 Visualisasi Risiko</span>
+          </button>
           <button
             id="tab-btn-filters"
             onClick={() => setActiveTab('filters')}
-            className={`px-4 py-2 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
+            className={`px-3.5 py-2 text-xs font-semibold rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${
               activeTab === 'filters' 
                 ? 'bg-blue-600 text-white shadow-sm' 
                 : 'text-slate-400 hover:text-slate-200'
             }`}
           >
-            3 Filter Tugas Pandas
+            <Filter className="w-3.5 h-3.5" />
+            <span>3 Filter Pandas</span>
           </button>
           <button
-            id="tab-btn-charts"
-            onClick={() => setActiveTab('charts')}
-            className={`px-4 py-2 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
-              activeTab === 'charts' 
+            id="tab-btn-agregasi"
+            onClick={() => setActiveTab('agregasi')}
+            className={`px-3.5 py-2 text-xs font-semibold rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${
+              activeTab === 'agregasi' 
                 ? 'bg-blue-600 text-white shadow-sm' 
                 : 'text-slate-400 hover:text-slate-200'
             }`}
           >
-            5 Grafik Visualisasi Risiko
+            <TableIcon className="w-3.5 h-3.5" />
+            <span>Pivot & Agregasi</span>
           </button>
         </div>
       </div>
 
-      {activeTab === 'filters' ? (
+      {/* TAB 1: 5 VISUALISASI RISIKO */}
+      {activeTab === 'visualisasi' && (
+        <div className="space-y-6">
+          {/* Row 1: Grafik 1 (Histogram+KDE) & Grafik 2 (Correlation Heatmap) */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* GRAFIK 1: HISTOGRAM + KDE */}
+            <div className="bg-[#0f172a] rounded-xl p-5 border border-slate-800 shadow-xl">
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                    <span className="w-5 h-5 rounded-md bg-blue-500/20 text-blue-400 flex items-center justify-center text-xs font-bold">1</span>
+                    Histogram + KDE Distribusi PD Score
+                  </h3>
+                  <p className="text-[11px] text-slate-400 mt-0.5">
+                    Konsentrasi dan penyebaran frekuensi nilai Probability of Default
+                  </p>
+                </div>
+                <span className="text-[10px] font-mono font-semibold bg-slate-800 text-slate-300 px-2 py-0.5 rounded border border-slate-700">
+                  bins=30 + KDE
+                </span>
+              </div>
+              <HistogramKDEChart data={pdValues} binsCount={25} />
+            </div>
+
+            {/* GRAFIK 2: HEATMAP KORELASI */}
+            <div className="bg-[#0f172a] rounded-xl p-5 border border-slate-800 shadow-xl">
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                    <span className="w-5 h-5 rounded-md bg-rose-500/20 text-rose-400 flex items-center justify-center text-xs font-bold">2</span>
+                    Heatmap Korelasi Variabel Risiko
+                  </h3>
+                  <p className="text-[11px] text-slate-400 mt-0.5">
+                    Matriks korelasi Pearson antara PD, LGD, EAD, Pinjaman, Pendapatan, Skor &amp; DSR
+                  </p>
+                </div>
+                <span className="text-[10px] font-mono font-semibold bg-slate-800 text-slate-300 px-2 py-0.5 rounded border border-slate-700">
+                  vlag colormap
+                </span>
+              </div>
+              <CorrelationHeatmap data={correlationMatrix} />
+            </div>
+          </div>
+
+          {/* Row 2: Grafik 3 (Boxplot) & Grafik 4 (Stacked Bar Kolektibilitas) */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* GRAFIK 3: BOXPLOT PD */}
+            <div className="bg-[#0f172a] rounded-xl p-5 border border-slate-800 shadow-xl">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
+                <div>
+                  <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                    <span className="w-5 h-5 rounded-md bg-amber-500/20 text-amber-400 flex items-center justify-center text-xs font-bold">3</span>
+                    Boxplot PD berdasarkan {boxplotGroup === 'kategori_risiko' ? 'Kategori Risiko' : 'Segmen'}
+                  </h3>
+                  <p className="text-[11px] text-slate-400 mt-0.5">
+                    Median, Q1, Q3, rentang interkuartil (IQR), dan sebaran outlier
+                  </p>
+                </div>
+                <div className="flex items-center bg-slate-900 p-0.5 rounded-lg border border-slate-800 self-start">
+                  <button
+                    onClick={() => setBoxplotGroup('kategori_risiko')}
+                    className={`px-2 py-1 text-[10px] font-semibold rounded cursor-pointer ${
+                      boxplotGroup === 'kategori_risiko' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    Kategori Risiko
+                  </button>
+                  <button
+                    onClick={() => setBoxplotGroup('segmen')}
+                    className={`px-2 py-1 text-[10px] font-semibold rounded cursor-pointer ${
+                      boxplotGroup === 'segmen' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    Segmen
+                  </button>
+                </div>
+              </div>
+              <BoxplotChart data={boxplotData} valueLabel="PD Score" />
+            </div>
+
+            {/* GRAFIK 4: STACKED BAR KOLEKTIBILITAS */}
+            <div className="bg-[#0f172a] rounded-xl p-5 border border-slate-800 shadow-xl">
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                    <span className="w-5 h-5 rounded-md bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-xs font-bold">4</span>
+                    Komposisi Kolektibilitas per Segmen
+                  </h3>
+                  <p className="text-[11px] text-slate-400 mt-0.5">
+                    Proporsi status kredit Lancar vs Macet (NPL) pada Mikro, Kecil, dan Menengah
+                  </p>
+                </div>
+                <span className="text-[10px] font-mono font-semibold bg-slate-800 text-slate-300 px-2 py-0.5 rounded border border-slate-700">
+                  Stacked Bar + Crosstab
+                </span>
+              </div>
+              <StackedBarKolektibilitas records={records} />
+            </div>
+          </div>
+
+          {/* Row 3: Grafik 5 (Bubble Chart PD vs LGD with Total EAD Size) */}
+          <div className="bg-[#0f172a] rounded-xl p-5 border border-slate-800 shadow-xl">
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                  <span className="w-5 h-5 rounded-md bg-indigo-500/20 text-indigo-400 flex items-center justify-center text-xs font-bold">5</span>
+                  Bubble Chart PD vs LGD per Segmen (Size = Total EAD)
+                </h3>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  Sumbu X: Rata-rata PD | Sumbu Y: Rata-rata LGD | Ukuran Lingkaran: Total Exposure at Default (EAD)
+                </p>
+              </div>
+              <span className="text-[10px] font-mono font-semibold bg-indigo-500/20 text-indigo-300 px-2.5 py-0.5 rounded border border-indigo-500/30">
+                Risk Exposure Mapping
+              </span>
+            </div>
+            <BubbleChartPDvsLGD records={records} />
+          </div>
+        </div>
+      )}
+
+      {/* TAB 2: 3 FILTER TUGAS PANDAS */}
+      {activeTab === 'filters' && (
         <div className="space-y-6">
           {/* FILTER 1 CARD */}
           <div className="bg-[#0f172a] rounded-xl border border-slate-800 shadow-xl overflow-hidden">
             <div className="p-5 border-b border-slate-800 bg-slate-900/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
                 <div className="flex items-center gap-2">
-                  <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-rose-600 text-white">
-                    FILTER 1
+                  <span className="text-xs font-bold px-2 py-0.5 rounded bg-blue-500/20 text-blue-400 border border-blue-500/30">
+                    Filter 1
                   </span>
-                  <h3 className="text-sm font-semibold text-white">
-                    Skor Kredit &lt; 550 DAN Pinjaman &gt; Rp 50 Juta
+                  <h3 className="text-sm font-bold text-white">
+                    Skor Kredit &lt; 550 &amp; Pinjaman &gt; Rp 50 Juta
                   </h3>
                 </div>
                 <p className="text-xs text-slate-400 mt-1 font-mono">
-                  df[(df["skor_kredit"] &lt; 550) & (df["pinjaman"] &gt; 50_000_000)]
+                  df[(df['skor_kredit'] &lt; 550) &amp; (df['pinjaman'] &gt; 50_000_000)]
                 </p>
               </div>
-
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-semibold text-slate-400">Hasil:</span>
-                <span className="px-3 py-1 bg-rose-500/20 text-rose-400 font-bold rounded-xl text-xs font-mono border border-rose-500/30">
-                  {filter1Results.length} Nasabah
-                </span>
+              <div className="text-right">
+                <span className="text-xs text-slate-400">Total Ditemukan:</span>
+                <span className="text-lg font-bold font-mono text-rose-400 ml-2">{filter1Results.length} nasabah</span>
               </div>
             </div>
 
-            {/* Table */}
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto max-h-72">
               <table className="w-full text-left text-xs">
-                <thead className="bg-slate-900 text-slate-300 uppercase tracking-wider text-[10px] font-semibold border-b border-slate-800">
+                <thead className="bg-slate-900 text-slate-300 uppercase tracking-wider text-[10px] font-semibold border-b border-slate-800 sticky top-0">
                   <tr>
                     <th className="py-2.5 px-3">ID Nasabah</th>
                     <th className="py-2.5 px-3">Nama Nasabah</th>
-                    <th className="py-2.5 px-3 text-right">Skor Kredit (&lt;550)</th>
-                    <th className="py-2.5 px-3 text-right">Pinjaman (&gt;50Jt)</th>
-                    <th className="py-2.5 px-3 text-right">DSR</th>
-                    <th className="py-2.5 px-3 text-center">Status</th>
+                    <th className="py-2.5 px-3 text-right">Skor Kredit</th>
+                    <th className="py-2.5 px-3 text-right">PD Score</th>
+                    <th className="py-2.5 px-3 text-right">Pinjaman</th>
+                    <th className="py-2.5 px-3">Segmen</th>
+                    <th className="py-2.5 px-3">Status</th>
                     <th className="py-2.5 px-3">Cabang</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800 text-slate-300 font-medium">
-                  {filter1Results.length > 0 ? (
-                    filter1Results.map((r, idx) => (
-                      <tr key={idx} className="hover:bg-slate-800/50 transition-colors">
-                        <td className="py-2.5 px-3 font-mono font-bold text-blue-400">{r.id_nasabah}</td>
-                        <td className="py-2.5 px-3 text-white font-semibold">{r.nama_nasabah}</td>
-                        <td className="py-2.5 px-3 text-right font-mono font-bold text-rose-400">{r.skor_kredit}</td>
-                        <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-200">{formatCurrencyIDR(r.pinjaman)}</td>
-                        <td className="py-2.5 px-3 text-right font-mono text-slate-300">{formatPercentageIDR(r.dsr)}</td>
-                        <td className="py-2.5 px-3 text-center">
-                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                            r.status_kredit === 'Lancar' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-rose-500/20 text-rose-400 border border-rose-500/30'
-                          }`}>
-                            {r.status_kredit}
-                          </span>
-                        </td>
-                        <td className="py-2.5 px-3 text-slate-400">{r.nama_cabang}</td>
-                      </tr>
-                    ))
-                  ) : (
-                    <tr>
-                      <td colSpan={7} className="py-6 text-center text-slate-500">
-                        Tidak ditemukan nasabah dengan skor &lt; 550 dan pinjaman &gt; Rp50 juta.
+                  {filter1Results.map((r, idx) => (
+                    <tr key={idx} className="hover:bg-slate-800/50">
+                      <td className="py-2 px-3 font-mono font-bold text-blue-400">{r.id_nasabah}</td>
+                      <td className="py-2 px-3 text-white font-semibold">{r.nama_nasabah}</td>
+                      <td className="py-2 px-3 text-right font-mono font-bold text-rose-400">{r.skor_kredit}</td>
+                      <td className="py-2 px-3 text-right font-mono text-amber-400">{formatPDScore(r.pd_score)}</td>
+                      <td className="py-2 px-3 text-right font-mono font-bold text-slate-200">{formatCurrencyIDR(r.pinjaman)}</td>
+                      <td className="py-2 px-3 font-semibold">{r.segmen}</td>
+                      <td className="py-2 px-3">
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                          r.status_kredit === 'Lancar' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'
+                        }`}>
+                          {r.status_kredit}
+                        </span>
                       </td>
+                      <td className="py-2 px-3 text-slate-400">{r.nama_cabang}</td>
                     </tr>
-                  )}
+                  ))}
                 </tbody>
               </table>
             </div>
@@ -227,97 +316,77 @@ export const RiskAnalysisView: React.FC<RiskAnalysisViewProps> = ({ records, sum
 
           {/* FILTER 2 CARD */}
           <div className="bg-[#0f172a] rounded-xl border border-slate-800 shadow-xl overflow-hidden">
-            <div className="p-5 border-b border-slate-800 bg-slate-900/60 space-y-3">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-amber-600 text-white">
-                      FILTER 2
-                    </span>
-                    <h3 className="text-sm font-semibold text-white">
-                      Status Kredit = Macet DAN Cabang Terpilih (.isin())
-                    </h3>
-                  </div>
-                  <p className="text-xs text-slate-400 mt-1 font-mono">
-                    df[(df["status_kredit"] == "Macet") & (df["nama_cabang"].isin(selected_branches))]
-                  </p>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-semibold text-slate-400">Hasil:</span>
-                  <span className="px-3 py-1 bg-amber-500/20 text-amber-400 font-bold rounded-xl text-xs font-mono border border-amber-500/30">
-                    {filter2Results.length} Nasabah Macet
-                  </span>
-                </div>
-              </div>
-
-              {/* Branch Multi-select pills */}
+            <div className="p-5 border-b border-slate-800 bg-slate-900/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
-                <span className="text-[11px] font-semibold text-slate-300 block mb-1.5">
-                  Pilih Cabang (st.multiselect equivalent):
-                </span>
-                <div className="flex flex-wrap gap-1.5">
-                  {availableBranches.map((branch) => {
-                    const isSelected = selectedBranches.includes(branch);
-                    return (
-                      <button
-                        key={branch}
-                        onClick={() => toggleBranch(branch)}
-                        className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 cursor-pointer ${
-                          isSelected
-                            ? 'bg-amber-600 text-white font-semibold'
-                            : 'bg-slate-800 text-slate-300 border border-slate-700 hover:bg-slate-700'
-                        }`}
-                      >
-                        {isSelected && <Check className="w-3 h-3" />}
-                        <span>{branch}</span>
-                      </button>
-                    );
-                  })}
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold px-2 py-0.5 rounded bg-blue-500/20 text-blue-400 border border-blue-500/30">
+                    Filter 2
+                  </span>
+                  <h3 className="text-sm font-bold text-white">
+                    Status Kredit 'Macet' &amp; Cabang Terpilih (.isin())
+                  </h3>
                 </div>
+                <p className="text-xs text-slate-400 mt-1 font-mono">
+                  df[(df['status_kredit'] == 'Macet') &amp; (df['nama_cabang'].isin(cabang_pilihan))]
+                </p>
+              </div>
+              <div className="text-right">
+                <span className="text-xs text-slate-400">Total Ditemukan:</span>
+                <span className="text-lg font-bold font-mono text-rose-400 ml-2">{filter2Results.length} nasabah</span>
               </div>
             </div>
 
-            {/* Table */}
-            <div className="overflow-x-auto">
+            {/* Branch Selector Chips */}
+            <div className="p-4 bg-slate-900/40 border-b border-slate-800 flex flex-wrap items-center gap-2">
+              <span className="text-xs text-slate-400 mr-2 flex items-center gap-1">
+                <Building className="w-3.5 h-3.5" /> Pilih Cabang:
+              </span>
+              {availableBranches.map(b => (
+                <button
+                  key={b}
+                  onClick={() => toggleBranch(b)}
+                  className={`px-2.5 py-1 text-xs rounded-lg border transition-all cursor-pointer font-medium ${
+                    selectedBranches.includes(b)
+                      ? 'bg-blue-600 text-white border-blue-500'
+                      : 'bg-slate-800 text-slate-400 border-slate-700 hover:border-slate-500'
+                  }`}
+                >
+                  {b}
+                </button>
+              ))}
+            </div>
+
+            <div className="overflow-x-auto max-h-72">
               <table className="w-full text-left text-xs">
-                <thead className="bg-slate-900 text-slate-300 uppercase tracking-wider text-[10px] font-semibold border-b border-slate-800">
+                <thead className="bg-slate-900 text-slate-300 uppercase tracking-wider text-[10px] font-semibold border-b border-slate-800 sticky top-0">
                   <tr>
                     <th className="py-2.5 px-3">ID Nasabah</th>
                     <th className="py-2.5 px-3">Nama Nasabah</th>
-                    <th className="py-2.5 px-3">Cabang (.isin())</th>
-                    <th className="py-2.5 px-3 text-center">Status</th>
+                    <th className="py-2.5 px-3">Cabang</th>
+                    <th className="py-2.5 px-3 text-right">Skor</th>
+                    <th className="py-2.5 px-3 text-right">PD Score</th>
                     <th className="py-2.5 px-3 text-right">Pinjaman</th>
-                    <th className="py-2.5 px-3 text-right">Skor Kredit</th>
-                    <th className="py-2.5 px-3 text-right">DSR</th>
+                    <th className="py-2.5 px-3 text-right">EAD</th>
+                    <th className="py-2.5 px-3">Status</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800 text-slate-300 font-medium">
-                  {filter2Results.length > 0 ? (
-                    filter2Results.map((r, idx) => (
-                      <tr key={idx} className="hover:bg-slate-800/50 transition-colors">
-                        <td className="py-2.5 px-3 font-mono font-bold text-blue-400">{r.id_nasabah}</td>
-                        <td className="py-2.5 px-3 text-white font-semibold">{r.nama_nasabah}</td>
-                        <td className="py-2.5 px-3 font-semibold text-amber-400">{r.nama_cabang}</td>
-                        <td className="py-2.5 px-3 text-center">
-                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/20 text-rose-400 border border-rose-500/30">
-                            {r.status_kredit}
-                          </span>
-                        </td>
-                        <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-200">{formatCurrencyIDR(r.pinjaman)}</td>
-                        <td className="py-2.5 px-3 text-right font-mono text-rose-400 font-bold">{r.skor_kredit}</td>
-                        <td className="py-2.5 px-3 text-right font-mono text-slate-300">{formatPercentageIDR(r.dsr)}</td>
-                      </tr>
-                    ))
-                  ) : (
-                    <tr>
-                      <td colSpan={7} className="py-6 text-center text-slate-500">
-                        {selectedBranches.length === 0 
-                          ? 'Silakan pilih minimal 1 cabang di atas untuk melihat data kredit macet.' 
-                          : 'Tidak ada nasabah macet pada cabang yang dipilih.'}
+                  {filter2Results.map((r, idx) => (
+                    <tr key={idx} className="hover:bg-slate-800/50">
+                      <td className="py-2 px-3 font-mono font-bold text-blue-400">{r.id_nasabah}</td>
+                      <td className="py-2 px-3 text-white font-semibold">{r.nama_nasabah}</td>
+                      <td className="py-2 px-3 text-blue-300 font-medium">{r.nama_cabang}</td>
+                      <td className="py-2 px-3 text-right font-mono">{r.skor_kredit}</td>
+                      <td className="py-2 px-3 text-right font-mono text-rose-400">{formatPDScore(r.pd_score)}</td>
+                      <td className="py-2 px-3 text-right font-mono font-bold text-slate-200">{formatCurrencyIDR(r.pinjaman)}</td>
+                      <td className="py-2 px-3 text-right font-mono text-slate-300">{formatCurrencyIDR(r.EAD)}</td>
+                      <td className="py-2 px-3">
+                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-500/20 text-rose-400 border border-rose-500/30">
+                          {r.status_kredit}
+                        </span>
                       </td>
                     </tr>
-                  )}
+                  ))}
                 </tbody>
               </table>
             </div>
@@ -328,244 +397,173 @@ export const RiskAnalysisView: React.FC<RiskAnalysisViewProps> = ({ records, sum
             <div className="p-5 border-b border-slate-800 bg-slate-900/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
                 <div className="flex items-center gap-2">
-                  <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-blue-600 text-white">
-                    FILTER 3
+                  <span className="text-xs font-bold px-2 py-0.5 rounded bg-blue-500/20 text-blue-400 border border-blue-500/30">
+                    Filter 3
                   </span>
-                  <h3 className="text-sm font-semibold text-white">
+                  <h3 className="text-sm font-bold text-white">
                     Usia 25–60 Tahun ATAU Skor Kredit &lt; 500
                   </h3>
                 </div>
                 <p className="text-xs text-slate-400 mt-1 font-mono">
-                  df[((df["usia"] &gt;= 25) & (df["usia"] &lt;= 60)) | (df["skor_kredit"] &lt; 500)]
+                  df[((df['usia'] &gt;= 25) &amp; (df['usia'] &lt;= 60)) | (df['skor_kredit'] &lt; 500)]
                 </p>
               </div>
-
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-semibold text-slate-400">Hasil:</span>
-                <span className="px-3 py-1 bg-blue-500/20 text-blue-400 font-bold rounded-xl text-xs font-mono border border-blue-500/30">
-                  {filter3Results.length} Nasabah
-                </span>
+              <div className="text-right">
+                <span className="text-xs text-slate-400">Total Ditemukan:</span>
+                <span className="text-lg font-bold font-mono text-emerald-400 ml-2">{filter3Results.length} nasabah</span>
               </div>
             </div>
 
-            {/* Table */}
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto max-h-72">
               <table className="w-full text-left text-xs">
-                <thead className="bg-slate-900 text-slate-300 uppercase tracking-wider text-[10px] font-semibold border-b border-slate-800">
+                <thead className="bg-slate-900 text-slate-300 uppercase tracking-wider text-[10px] font-semibold border-b border-slate-800 sticky top-0">
                   <tr>
                     <th className="py-2.5 px-3">ID Nasabah</th>
                     <th className="py-2.5 px-3">Nama Nasabah</th>
-                    <th className="py-2.5 px-3 text-right">Usia (25–60)</th>
-                    <th className="py-2.5 px-3 text-right">Skor Kredit (&lt;500)</th>
+                    <th className="py-2.5 px-3 text-right">Usia</th>
+                    <th className="py-2.5 px-3 text-right">Skor Kredit</th>
+                    <th className="py-2.5 px-3 text-right">PD Score</th>
                     <th className="py-2.5 px-3 text-right">Pinjaman</th>
-                    <th className="py-2.5 px-3 text-center">Kategori NPL</th>
+                    <th className="py-2.5 px-3">Kategori NPL</th>
                     <th className="py-2.5 px-3">Cabang</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800 text-slate-300 font-medium">
-                  {filter3Results.length > 0 ? (
-                    filter3Results.map((r, idx) => (
-                      <tr key={idx} className="hover:bg-slate-800/50 transition-colors">
-                        <td className="py-2.5 px-3 font-mono font-bold text-blue-400">{r.id_nasabah}</td>
-                        <td className="py-2.5 px-3 text-white font-semibold">{r.nama_nasabah}</td>
-                        <td className="py-2.5 px-3 text-right font-mono font-semibold">
-                          <span className={`${r.usia >= 25 && r.usia <= 60 ? 'text-blue-400 font-bold' : 'text-slate-500'}`}>
-                            {r.usia} thn
-                          </span>
-                        </td>
-                        <td className="py-2.5 px-3 text-right font-mono">
-                          <span className={`${r.skor_kredit < 500 ? 'text-rose-400 font-bold' : 'text-slate-300'}`}>
-                            {r.skor_kredit}
-                          </span>
-                        </td>
-                        <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-200">{formatCurrencyIDR(r.pinjaman)}</td>
-                        <td className="py-2.5 px-3 text-center">
-                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                            r.flag_npl === 'Rendah' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' :
-                            r.flag_npl === 'Sedang-Rendah' ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' :
-                            r.flag_npl === 'Sedang-Tinggi' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' :
-                            'bg-rose-500/20 text-rose-400 border border-rose-500/30'
-                          }`}>
-                            {r.flag_npl}
-                          </span>
-                        </td>
-                        <td className="py-2.5 px-3 text-slate-400">{r.nama_cabang}</td>
-                      </tr>
-                    ))
-                  ) : (
-                    <tr>
-                      <td colSpan={7} className="py-6 text-center text-slate-500">
-                        Tidak ada data yang memenuhi kriteria filter 3.
+                  {filter3Results.map((r, idx) => (
+                    <tr key={idx} className="hover:bg-slate-800/50">
+                      <td className="py-2 px-3 font-mono font-bold text-blue-400">{r.id_nasabah}</td>
+                      <td className="py-2 px-3 text-white font-semibold">{r.nama_nasabah}</td>
+                      <td className="py-2 px-3 text-right font-mono font-semibold">
+                        <span className={r.usia >= 25 && r.usia <= 60 ? 'text-blue-400 font-bold' : 'text-slate-400'}>
+                          {r.usia} thn
+                        </span>
                       </td>
+                      <td className="py-2 px-3 text-right font-mono">
+                        <span className={r.skor_kredit < 500 ? 'text-rose-400 font-bold' : 'text-slate-200'}>
+                          {r.skor_kredit}
+                        </span>
+                      </td>
+                      <td className="py-2 px-3 text-right font-mono text-amber-400">{formatPDScore(r.pd_score)}</td>
+                      <td className="py-2 px-3 text-right font-mono font-bold text-slate-200">{formatCurrencyIDR(r.pinjaman)}</td>
+                      <td className="py-2 px-3">
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                          r.flag_npl === 'Rendah' ? 'bg-emerald-500/20 text-emerald-400' :
+                          r.flag_npl === 'Sedang-Rendah' ? 'bg-blue-500/20 text-blue-400' :
+                          r.flag_npl === 'Sedang-Tinggi' ? 'bg-amber-500/20 text-amber-400' :
+                          'bg-rose-500/20 text-rose-400'
+                        }`}>
+                          {r.flag_npl}
+                        </span>
+                      </td>
+                      <td className="py-2 px-3 text-slate-400">{r.nama_cabang}</td>
                     </tr>
-                  )}
+                  ))}
                 </tbody>
               </table>
             </div>
           </div>
         </div>
-      ) : (
-        /* Visual Charts Section */
+      )}
+
+      {/* TAB 3: PIVOT & AGREGASI CABANG-SEGMEN */}
+      {activeTab === 'agregasi' && (
         <div className="space-y-6">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Chart 1: Distribusi Kategori Risiko */}
-            <div className="bg-[#0f172a] rounded-xl p-5 border border-slate-800 shadow-xl">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-sm font-semibold text-white flex items-center gap-1.5">
-                  <Layers className="w-4 h-4 text-blue-400" />
-                  Chart 1: Distribusi Kategori Risiko
+          {/* PIVOT TABLE: RATA-RATA PD PER SEGMEN */}
+          <div className="bg-[#0f172a] rounded-xl p-5 border border-slate-800 shadow-xl">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                  <TableIcon className="w-4 h-4 text-blue-400" />
+                  Pivot Table: Rata-rata Probability of Default (PD) per Segmen
                 </h3>
-                <span className="text-[10px] font-semibold bg-slate-800 text-slate-400 px-2 py-0.5 rounded border border-slate-700">
-                  Plafon Pinjaman
-                </span>
+                <p className="text-xs text-slate-400 mt-0.5 font-mono">
+                  pd.pivot_table(df, index='segmen', values='pd', aggfunc='mean')
+                </p>
               </div>
-              <div className="h-64">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={riskDistData} margin={{ top: 10, right: 10, left: -20, bottom: 10 }}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#1e293b" />
-                    <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#94a3b8' }} />
-                    <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} />
-                    <Tooltip 
-                      formatter={(val: any) => [`${val} Nasabah`, 'Jumlah']}
-                      contentStyle={{ backgroundColor: '#020617', color: '#FFF', borderRadius: '8px', fontSize: '11px', border: '1px solid #1e293b' }}
-                    />
-                    <Bar dataKey="count" radius={[6, 6, 0, 0]}>
-                      {riskDistData.map((_, index) => (
-                        <Cell key={`cell-${index}`} fill={COLORS_RISK[index % COLORS_RISK.length]} />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
+              <span className="text-[10px] font-mono bg-blue-500/20 text-blue-300 px-2 py-0.5 rounded border border-blue-500/30">
+                pd.pivot_table
+              </span>
             </div>
 
-            {/* Chart 2: Distribusi Flag NPL */}
-            <div className="bg-[#0f172a] rounded-xl p-5 border border-slate-800 shadow-xl">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-sm font-semibold text-white flex items-center gap-1.5">
-                  <AlertTriangle className="w-4 h-4 text-amber-400" />
-                  Chart 2: Distribusi Flag NPL
-                </h3>
-                <span className="text-[10px] font-semibold bg-slate-800 text-slate-400 px-2 py-0.5 rounded border border-slate-700">
-                  Skor Kredit
-                </span>
-              </div>
-              <div className="h-64">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={nplDistData} margin={{ top: 10, right: 10, left: -20, bottom: 10 }}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#1e293b" />
-                    <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#94a3b8' }} />
-                    <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} />
-                    <Tooltip 
-                      formatter={(val: any) => [`${val} Nasabah`, 'Jumlah']}
-                      contentStyle={{ backgroundColor: '#020617', color: '#FFF', borderRadius: '8px', fontSize: '11px', border: '1px solid #1e293b' }}
-                    />
-                    <Bar dataKey="count" radius={[6, 6, 0, 0]}>
-                      {nplDistData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={COLORS_NPL[entry.name] || '#3B82F6'} />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-
-            {/* Chart 3: Distribusi Status Kredit */}
-            <div className="bg-[#0f172a] rounded-xl p-5 border border-slate-800 shadow-xl">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-sm font-semibold text-white flex items-center gap-1.5">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                  Chart 3: Distribusi Status Kredit
-                </h3>
-                <span className="text-[10px] font-semibold bg-slate-800 text-slate-400 px-2 py-0.5 rounded border border-slate-700">
-                  Lancar vs Macet
-                </span>
-              </div>
-              <div className="h-64 flex items-center justify-center">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={statusData}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={60}
-                      outerRadius={85}
-                      paddingAngle={5}
-                      dataKey="value"
-                    >
-                      {statusData.map((entry, index) => (
-                        <Cell key={`cell-status-${index}`} fill={entry.color} />
-                      ))}
-                    </Pie>
-                    <Tooltip 
-                      formatter={(val: any, name: any) => [`${val} Nasabah`, name]}
-                      contentStyle={{ backgroundColor: '#020617', color: '#FFF', borderRadius: '8px', fontSize: '11px', border: '1px solid #1e293b' }}
-                    />
-                    <Legend verticalAlign="bottom" height={36} wrapperStyle={{ color: '#94a3b8' }} />
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-
-            {/* Chart 4: Rata-rata Skor Kredit Berdasarkan Kategori Risiko */}
-            <div className="bg-[#0f172a] rounded-xl p-5 border border-slate-800 shadow-xl">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-sm font-semibold text-white flex items-center gap-1.5">
-                  <Award className="w-4 h-4 text-purple-400" />
-                  Chart 4: Rata-rata Skor Kredit per Kategori Risiko
-                </h3>
-                <span className="text-[10px] font-semibold bg-slate-800 text-slate-400 px-2 py-0.5 rounded border border-slate-700">
-                  Skor Rata-rata
-                </span>
-              </div>
-              <div className="h-64">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={riskAggregates} margin={{ top: 10, right: 10, left: -20, bottom: 10 }}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#1e293b" />
-                    <XAxis dataKey="kategori_risiko" tick={{ fontSize: 11, fill: '#94a3b8' }} />
-                    <YAxis domain={[300, 850]} tick={{ fontSize: 11, fill: '#94a3b8' }} />
-                    <Tooltip 
-                      formatter={(val: any) => [`${Number(val).toFixed(1)} Poin`, 'Rata-rata Skor']}
-                      contentStyle={{ backgroundColor: '#020617', color: '#FFF', borderRadius: '8px', fontSize: '11px', border: '1px solid #1e293b' }}
-                    />
-                    <Bar dataKey="rata_rata_skor" fill="#8B5CF6" radius={[6, 6, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-900 text-slate-300 uppercase text-[10px] font-semibold border-b border-slate-800">
+                  <tr>
+                    <th className="py-2.5 px-4">Segmen</th>
+                    <th className="py-2.5 px-4 text-right">Rata-rata PD Score</th>
+                    <th className="py-2.5 px-4 text-right">Persentase PD</th>
+                    <th className="py-2.5 px-4 text-right">Jumlah Nasabah</th>
+                    <th className="py-2.5 px-4 text-right">Total Pinjaman</th>
+                    <th className="py-2.5 px-4 text-right">Total EAD</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800 font-mono">
+                  {pivotPDSegmen.map((p) => (
+                    <tr key={p.segmen} className="hover:bg-slate-800/40">
+                      <td className="py-3 px-4 font-sans font-bold text-white flex items-center gap-2">
+                        <span className={`w-2.5 h-2.5 rounded-full ${
+                          p.segmen === 'Mikro' ? 'bg-emerald-500' : p.segmen === 'Kecil' ? 'bg-blue-500' : 'bg-amber-500'
+                        }`}></span>
+                        {p.segmen}
+                      </td>
+                      <td className="py-3 px-4 text-right font-bold text-amber-400">{formatPDScore(p.rata_rata_pd)}</td>
+                      <td className="py-3 px-4 text-right font-bold text-blue-400">{(p.rata_rata_pd * 100).toFixed(2)}%</td>
+                      <td className="py-3 px-4 text-right text-slate-200 font-sans">{p.jumlah_nasabah} Nasabah</td>
+                      <td className="py-3 px-4 text-right text-slate-200 font-bold">{formatCurrencyIDR(p.total_pinjaman)}</td>
+                      <td className="py-3 px-4 text-right text-emerald-400 font-bold">{formatCurrencyIDR(p.total_ead)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
 
-          {/* Chart 5: Rata-rata DSR Berdasarkan Kategori Risiko */}
+          {/* TABEL AGREGASI CABANG & SEGMEN */}
           <div className="bg-[#0f172a] rounded-xl p-5 border border-slate-800 shadow-xl">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-semibold text-white flex items-center gap-1.5">
-                <Percent className="w-4 h-4 text-indigo-400" />
-                Chart 5: Rata-rata DSR Berdasarkan Kategori Risiko
-              </h3>
-              <span className="text-[10px] font-semibold bg-indigo-500/10 text-indigo-400 px-2 py-0.5 rounded border border-indigo-500/20">
-                Batas Aman DSR: ≤ 40%
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                  <Building className="w-4 h-4 text-indigo-400" />
+                  Tabel Agregasi per Cabang dan Segmen
+                </h3>
+                <p className="text-xs text-slate-400 mt-0.5 font-mono">
+                  df.groupby(['nama_cabang', 'segmen']).agg(...)
+                </p>
+              </div>
+              <span className="text-[10px] font-mono bg-indigo-500/20 text-indigo-300 px-2 py-0.5 rounded border border-indigo-500/30">
+                groupby + agg
               </span>
             </div>
-            <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={riskAggregates} margin={{ top: 10, right: 20, left: -10, bottom: 10 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#1e293b" />
-                  <XAxis dataKey="kategori_risiko" tick={{ fontSize: 11, fill: '#94a3b8' }} />
-                  <YAxis tickFormatter={(v) => `${v}%`} tick={{ fontSize: 11, fill: '#94a3b8' }} />
-                  <Tooltip 
-                    formatter={(val: any) => [`${Number(val).toFixed(2)}%`, 'Rata-rata DSR']}
-                    contentStyle={{ backgroundColor: '#020617', color: '#FFF', borderRadius: '8px', fontSize: '11px', border: '1px solid #1e293b' }}
-                  />
-                  <Bar dataKey="rata_rata_dsr" fill="#3B82F6" radius={[6, 6, 0, 0]}>
-                    {riskAggregates.map((entry, index) => (
-                      <Cell 
-                        key={`cell-${index}`} 
-                        fill={entry.rata_rata_dsr > 40 ? '#EF4444' : '#10B981'} 
-                      />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
+
+            <div className="overflow-x-auto max-h-96">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-900 text-slate-300 uppercase text-[10px] font-semibold border-b border-slate-800 sticky top-0">
+                  <tr>
+                    <th className="py-2.5 px-3">Nama Cabang</th>
+                    <th className="py-2.5 px-3">Segmen</th>
+                    <th className="py-2.5 px-3 text-right">Nasabah</th>
+                    <th className="py-2.5 px-3 text-right">Rata-rata PD</th>
+                    <th className="py-2.5 px-3 text-right">Rata-rata LGD</th>
+                    <th className="py-2.5 px-3 text-right">Total Pinjaman</th>
+                    <th className="py-2.5 px-3 text-right">Total EAD</th>
+                    <th className="py-2.5 px-3 text-right">Rata-rata Pendapatan</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800 font-mono text-[11px]">
+                  {branchSegmentAggs.map((row, idx) => (
+                    <tr key={idx} className="hover:bg-slate-800/40">
+                      <td className="py-2.5 px-3 font-sans font-semibold text-white">{row.nama_cabang}</td>
+                      <td className="py-2.5 px-3 font-sans font-medium text-blue-300">{row.segmen}</td>
+                      <td className="py-2.5 px-3 text-right font-sans">{row.jumlah_nasabah}</td>
+                      <td className="py-2.5 px-3 text-right text-amber-400 font-bold">{formatPDScore(row.rata_rata_pd)}</td>
+                      <td className="py-2.5 px-3 text-right text-indigo-400">{(row.rata_rata_lgd * 100).toFixed(1)}%</td>
+                      <td className="py-2.5 px-3 text-right text-slate-200 font-bold">{formatCurrencyIDR(row.total_pinjaman)}</td>
+                      <td className="py-2.5 px-3 text-right text-emerald-400 font-bold">{formatCurrencyIDR(row.total_ead)}</td>
+                      <td className="py-2.5 px-3 text-right text-slate-300">{formatCurrencyIDR(row.rata_rata_pendapatan)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
         </div>

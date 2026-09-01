@@ -27,11 +27,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
 }) => {
   const menuItems: { id: ActivePage; label: string; icon: React.ReactNode; badge?: string }[] = [
     { id: 'dashboard', label: 'Dashboard Overview', icon: <LayoutDashboard className="w-4 h-4" /> },
-    { id: 'data-explorer', label: 'Data Explorer', icon: <Table2 className="w-4 h-4" />, badge: datasetSummary ? `${datasetSummary.totalRows}` : undefined },
-    { id: 'risk-analysis', label: 'Risk Analysis', icon: <ShieldAlert className="w-4 h-4" /> },
-    { id: 'portfolio-analysis', label: 'Portfolio Analysis', icon: <PieChart className="w-4 h-4" /> },
-    { id: 'data-cleaning', label: 'Data Cleaning', icon: <Sparkles className="w-4 h-4" /> },
-    { id: 'export-data', label: 'Export Data', icon: <Download className="w-4 h-4" /> },
+    { id: 'risk-analysis', label: 'Visualisasi Risiko & 5 Grafik', icon: <ShieldAlert className="w-4 h-4" /> },
+    { id: 'data-cleaning', label: 'Data Cleaning & IQR', icon: <Sparkles className="w-4 h-4" /> },
+    { id: 'portfolio-analysis', label: 'Analisis Portofolio & EL', icon: <PieChart className="w-4 h-4" /> },
+    { id: 'data-explorer', label: 'Database Debitur', icon: <Table2 className="w-4 h-4" />, badge: datasetSummary ? `${datasetSummary.totalRows}` : undefined },
+    { id: 'export-data', label: 'Export Excel & Python', icon: <Download className="w-4 h-4" /> },
   ];
 
   return (

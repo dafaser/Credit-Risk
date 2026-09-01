@@ -224,7 +224,7 @@ export default function App() {
                   summary={datasetSummary}
                 />
               )}
-              {activePage === 'risk-analysis' && (
+              {(activePage === 'risk-analysis' || activePage === 'risiko' || activePage === 'visualisasi-risiko') && (
                 <RiskAnalysisView
                   records={cleanedRecords}
                   summary={datasetSummary}

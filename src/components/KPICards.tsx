@@ -1,7 +1,7 @@
 import React from 'react';
-import { Users, Banknote, Award, Percent, ShieldAlert, AlertTriangle } from 'lucide-react';
+import { Users, Banknote, ShieldAlert, Percent, TrendingUp, AlertTriangle } from 'lucide-react';
 import { CreditRecord, DatasetSummary } from '../types';
-import { formatCurrencyIDR, formatPercentageIDR, formatNumberIDR } from '../utils/creditEngine';
+import { formatCurrencyIDR, formatPercentageIDR, formatPDScore, formatNumberIDR } from '../utils/creditEngine';
 
 interface KPICardsProps {
   records: CreditRecord[];
@@ -10,72 +10,82 @@ interface KPICardsProps {
 
 export const KPICards: React.FC<KPICardsProps> = ({ records, summary }) => {
   const totalNasabah = records.length;
+  
+  // Rata-rata PD
+  const avgPD = totalNasabah > 0 ? records.reduce((acc, cur) => acc + cur.pd_score, 0) / totalNasabah : 0;
+  
+  // Total Eksposur (EAD)
+  const totalEAD = records.reduce((acc, cur) => acc + (cur.EAD || cur.pinjaman || 0), 0);
+  
+  // NPL Rate
+  const macetCount = records.filter(r => r.status_kredit === 'Macet' || r.kolektibilitas === 'Macet').length;
+  const nplRate = totalNasabah > 0 ? (macetCount / totalNasabah) * 100 : 0;
+
+  // Additional Supporting Metrics
   const totalPinjaman = records.reduce((acc, cur) => acc + (cur.pinjaman || 0), 0);
   const avgSkorKredit = totalNasabah > 0 ? records.reduce((acc, cur) => acc + cur.skor_kredit, 0) / totalNasabah : 0;
-  
-  const validDsrList = records.filter(r => r.dsr > 0);
-  const avgDSR = validDsrList.length > 0 ? validDsrList.reduce((acc, cur) => acc + cur.dsr, 0) / validDsrList.length : 0;
-
-  const validELList = records.filter(r => r.expected_loss !== undefined);
-  const totalExpectedLoss = validELList.length > 0 ? validELList.reduce((acc, cur) => acc + (cur.expected_loss || 0), 0) : null;
-
-  const highRiskCustomers = records.filter(r => r.flag_npl === 'Tinggi').length;
-  const highRiskPercent = totalNasabah > 0 ? (highRiskCustomers / totalNasabah) * 100 : 0;
 
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
-      {/* 1. Total Nasabah */}
-      <div className="bg-[#1e293b] p-4 rounded-xl border border-slate-700 shadow-xl">
-        <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Total Nasabah</p>
-        <p className="text-2xl font-bold text-white font-mono">{formatNumberIDR(totalNasabah)}</p>
-        <p className="text-[10px] text-slate-500 font-mono mt-1">Debitur aktif</p>
-      </div>
-
-      {/* 2. Total Pinjaman */}
-      <div className="bg-[#1e293b] p-4 rounded-xl border border-slate-700 shadow-xl">
-        <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Total Pinjaman</p>
-        <p className="text-lg font-bold text-blue-400 truncate" title={formatCurrencyIDR(totalPinjaman)}>
-          {formatCurrencyIDR(totalPinjaman)}
-        </p>
-        <p className="text-[10px] text-blue-400/70 font-mono mt-1">Outstanding Portofolio</p>
-      </div>
-
-      {/* 3. Avg Credit Score */}
-      <div className="bg-[#1e293b] p-4 rounded-xl border border-slate-700 shadow-xl">
-        <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Avg Credit Score</p>
-        <p className="text-2xl font-bold text-white font-mono">{avgSkorKredit.toFixed(1)}</p>
-        <p className="text-[10px] text-emerald-400 font-mono mt-1">
-          {avgSkorKredit >= 700 ? 'Kategori Baik' : avgSkorKredit >= 600 ? 'Moderat' : 'Monitoring'}
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* 1. TOTAL NASABAH */}
+      <div className="bg-[#0f172a] p-5 rounded-xl border border-slate-800 shadow-xl relative overflow-hidden group hover:border-slate-700 transition-all">
+        <div className="flex items-center justify-between">
+          <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider">Total Nasabah</p>
+          <div className="w-8 h-8 rounded-lg bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400">
+            <Users className="w-4 h-4" />
+          </div>
+        </div>
+        <p className="text-3xl font-bold text-white font-mono mt-2">{formatNumberIDR(totalNasabah)}</p>
+        <p className="text-[11px] text-slate-400 mt-1 font-mono flex items-center gap-1.5">
+          <span className="text-emerald-400">● 100% data clean</span>
+          <span>• CIF aktif</span>
         </p>
       </div>
 
-      {/* 4. Avg DSR */}
-      <div className="bg-[#1e293b] p-4 rounded-xl border border-slate-700 shadow-xl">
-        <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Avg DSR</p>
-        <p className={`text-2xl font-bold font-mono ${avgDSR > 40 ? 'text-rose-400' : 'text-amber-400'}`}>
-          {formatPercentageIDR(avgDSR, 1)}
+      {/* 2. RATA-RATA PD (Probability of Default) */}
+      <div className="bg-[#0f172a] p-5 rounded-xl border border-slate-800 shadow-xl relative overflow-hidden group hover:border-slate-700 transition-all">
+        <div className="flex items-center justify-between">
+          <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider">Rata-rata PD Score</p>
+          <div className="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
+            <Percent className="w-4 h-4" />
+          </div>
+        </div>
+        <p className="text-3xl font-bold text-amber-400 font-mono mt-2">{formatPDScore(avgPD)}</p>
+        <p className="text-[11px] text-slate-400 mt-1 font-mono">
+          Setara <span className="text-white font-bold">{(avgPD * 100).toFixed(2)}%</span> probabilitas default
         </p>
-        <p className="text-[10px] text-slate-500 font-mono mt-1">Debt Service Ratio</p>
       </div>
 
-      {/* 5. Expected Loss */}
-      <div className="bg-[#1e293b] p-4 rounded-xl border border-slate-700 shadow-xl">
-        <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Expected Loss</p>
-        <p className="text-lg font-bold text-rose-400 truncate" title={totalExpectedLoss !== null ? formatCurrencyIDR(totalExpectedLoss) : 'N/A'}>
-          {totalExpectedLoss !== null ? formatCurrencyIDR(totalExpectedLoss) : 'N/A'}
+      {/* 3. NPL RATE */}
+      <div className="bg-[#0f172a] p-5 rounded-xl border border-slate-800 shadow-xl relative overflow-hidden group hover:border-slate-700 transition-all">
+        <div className="flex items-center justify-between">
+          <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider">NPL Rate (Kredit Macet)</p>
+          <div className="w-8 h-8 rounded-lg bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-400">
+            <ShieldAlert className="w-4 h-4" />
+          </div>
+        </div>
+        <p className={`text-3xl font-bold font-mono mt-2 ${nplRate > 5 ? 'text-rose-500' : 'text-emerald-400'}`}>
+          {formatPercentageIDR(nplRate, 2)}
         </p>
-        <p className="text-[10px] text-rose-400/70 font-mono mt-1">EAD × LGD Model</p>
+        <p className="text-[11px] text-slate-400 mt-1 font-mono">
+          <span className="text-rose-400 font-semibold">{macetCount} debitur macet</span> dari {totalNasabah}
+        </p>
       </div>
 
-      {/* 6. High Risk */}
-      <div className="bg-rose-500/10 p-4 rounded-xl border border-rose-500/30 shadow-xl relative">
-        <p className="text-[10px] text-rose-300 uppercase tracking-wider mb-1">High Risk</p>
-        <p className="text-2xl font-bold text-rose-500 font-mono">{formatNumberIDR(highRiskCustomers)}</p>
-        <p className="text-[10px] text-rose-400/80 font-mono mt-1">{formatPercentageIDR(highRiskPercent, 1)} portofolio</p>
-        <span className="absolute top-2.5 right-2.5 flex h-2 w-2">
-          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
-          <span className="relative inline-flex rounded-full h-2 w-2 bg-rose-500"></span>
-        </span>
+      {/* 4. TOTAL EKSPOSUR (EAD) */}
+      <div className="bg-[#0f172a] p-5 rounded-xl border border-slate-800 shadow-xl relative overflow-hidden group hover:border-slate-700 transition-all">
+        <div className="flex items-center justify-between">
+          <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider">Total Eksposur (EAD)</p>
+          <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
+            <Banknote className="w-4 h-4" />
+          </div>
+        </div>
+        <p className="text-2xl font-bold text-emerald-400 font-mono mt-2 truncate" title={formatCurrencyIDR(totalEAD)}>
+          {formatCurrencyIDR(totalEAD)}
+        </p>
+        <p className="text-[11px] text-slate-400 mt-1 font-mono truncate">
+          Plafon: <span className="text-slate-300">{formatCurrencyIDR(totalPinjaman)}</span>
+        </p>
       </div>
     </div>
   );
