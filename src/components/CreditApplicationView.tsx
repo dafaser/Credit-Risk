@@ -14,7 +14,9 @@ import {
   ShieldAlert,
   Search,
   Check,
-  X
+  X,
+  Pencil,
+  Trash2
 } from 'lucide-react';
 import { CreditApplication } from '../types';
 import { formatRupiah, formatPercent } from '../utils/aiEthicsEngine';
@@ -31,6 +33,415 @@ export const formatRupiahInputValue = (val: number): string => {
 export const parseRupiahInputValue = (str: string): number => {
   const digitsOnly = str.replace(/\D/g, '');
   return digitsOnly ? parseInt(digitsOnly, 10) : 0;
+};
+
+// Modal Komponen untuk Edit Data Pengajuan & Keputusan Analis
+interface EditModalProps {
+  app: CreditApplication;
+  onClose: () => void;
+  onSave: (updated: CreditApplication) => void;
+}
+
+const EditApplicationModal: React.FC<EditModalProps> = ({ app, onClose, onSave }) => {
+  const [nama, setNama] = useState(app.nama);
+  const [cif, setCif] = useState(app.cif);
+  const [income, setIncome] = useState(app.income);
+  const [usia, setUsia] = useState(app.usia);
+  const [jumlahPinjaman, setJumlahPinjaman] = useState(app.jumlah_pinjaman);
+  const [durasiPinjaman, setDurasiPinjaman] = useState(app.durasi_pinjaman);
+  const [bungaTahunan] = useState(app.bunga_tahunan || 8.5);
+  const [nilaiAgunan, setNilaiAgunan] = useState(app.nilai_agunan);
+  const [cicilanLain, setCicilanLain] = useState(app.cicilan_lain);
+  const [dpd, setDpd] = useState(app.dpd);
+  const [statusPekerjaan, setStatusPekerjaan] = useState(app.status_pekerjaan);
+  const [kodePos, setKodePos] = useState(app.kode_pos);
+  const [analystDecision, setAnalystDecision] = useState<'APPROVED' | 'REJECTED' | 'PENDING'>(app.analyst_decision);
+  const [analystNotes, setAnalystNotes] = useState(app.analyst_notes || '');
+  const [analystOfficer, setAnalystOfficer] = useState(app.analyst_officer || OFFICER_NAME);
+
+  // Recalculations live
+  const pokokBulanan = durasiPinjaman > 0 ? jumlahPinjaman / durasiPinjaman : 0;
+  const bungaBulanan = durasiPinjaman > 0 ? (jumlahPinjaman * (bungaTahunan / 100)) / 12 : 0;
+  const angsuranBulanan = Math.round(pokokBulanan + bungaBulanan);
+  const totalKewajiban = angsuranBulanan + cicilanLain;
+  const calculatedDSR = income > 0 ? parseFloat((totalKewajiban / income).toFixed(4)) : 0;
+  const calculatedLTV = nilaiAgunan > 0 ? parseFloat((jumlahPinjaman / nilaiAgunan).toFixed(4)) : 0.8;
+  const youngPenalty = usia < 30 ? 5 : 0;
+  const calculatedRiskScore = parseFloat((calculatedDSR * 4 + calculatedLTV * 3 + dpd * 1.5 + youngPenalty).toFixed(2));
+
+  const zScore =
+    (dpd - 8.0) * 0.26 +
+    (35.0 - usia) * 0.025 +
+    ((7500000 - income) / 10000000) * 0.18 +
+    (durasiPinjaman - 35) * 0.015 +
+    (calculatedDSR - 0.2) * 1.8 +
+    (calculatedLTV - 0.22) * 1.5 -
+    1.85;
+
+  const calculatedPD = parseFloat(
+    Math.max(0.015, Math.min(0.985, 1.0 / (1.0 + Math.exp(-zScore)))).toFixed(4)
+  );
+
+  let mlRecommendation: 'ACCEPT' | 'MANUAL_REVIEW' | 'REJECT' = 'ACCEPT';
+  if (calculatedPD > 0.65) mlRecommendation = 'REJECT';
+  else if (calculatedPD >= 0.35) mlRecommendation = 'MANUAL_REVIEW';
+
+  const handleSave = (e: React.FormEvent) => {
+    e.preventDefault();
+    const updated: CreditApplication = {
+      ...app,
+      nama,
+      cif,
+      income,
+      usia,
+      jumlah_pinjaman: jumlahPinjaman,
+      durasi_pinjaman: durasiPinjaman,
+      bunga_tahunan: bungaTahunan,
+      nilai_agunan: nilaiAgunan,
+      cicilan_lain: cicilanLain,
+      dpd,
+      status_pekerjaan: statusPekerjaan,
+      kode_pos: kodePos,
+      angsuran_bulanan: angsuranBulanan,
+      dsr: calculatedDSR,
+      ltv: calculatedLTV,
+      risk_score: calculatedRiskScore,
+      proba_default: calculatedPD,
+      ml_recommendation: mlRecommendation,
+      analyst_decision: analystDecision,
+      analyst_officer: analystOfficer,
+      analyst_notes: analystNotes,
+      decision_timestamp: new Date().toLocaleString('id-ID')
+    };
+    onSave(updated);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm overflow-y-auto">
+      <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-3xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden my-auto">
+        {/* Modal Header */}
+        <div className="flex items-center justify-between p-5 border-b border-slate-800 bg-slate-950">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-blue-500/20 text-blue-400 flex items-center justify-center border border-blue-500/30">
+              <Pencil className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-white flex items-center gap-2">
+                Edit Berkas Pengajuan Kredit
+                <span className="text-xs font-mono font-normal px-2 py-0.5 rounded bg-slate-800 text-slate-300">
+                  {app.id}
+                </span>
+              </h3>
+              <p className="text-xs text-slate-400">
+                Ubah informasi debitur, parameter pinjaman, atau revisi keputusan analis
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-2 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Modal Body */}
+        <form onSubmit={handleSave} className="p-6 overflow-y-auto space-y-6 text-xs">
+          {/* 1. Informasi Debitur */}
+          <div>
+            <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider mb-3 flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-blue-400"></span>
+              1. Identitas Debitur & Wilayah
+            </h4>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <label className="block text-slate-400 mb-1 font-semibold">Nama Lengkap</label>
+                <input
+                  type="text"
+                  value={nama}
+                  onChange={(e) => setNama(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white font-medium focus:border-blue-500 focus:outline-none"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-slate-400 mb-1 font-semibold">Nomor CIF</label>
+                <input
+                  type="text"
+                  value={cif}
+                  onChange={(e) => setCif(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white font-mono focus:border-blue-500 focus:outline-none"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-slate-400 mb-1 font-semibold">Usia (Tahun)</label>
+                <input
+                  type="number"
+                  min="21"
+                  max="65"
+                  value={usia}
+                  onChange={(e) => setUsia(Number(e.target.value) || 21)}
+                  className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white font-mono focus:border-blue-500 focus:outline-none"
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
+              <div>
+                <label className="block text-slate-400 mb-1 font-semibold">Pekerjaan</label>
+                <select
+                  value={statusPekerjaan}
+                  onChange={(e) => setStatusPekerjaan(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white focus:border-blue-500 focus:outline-none"
+                >
+                  <option value="PNS">PNS / BUMN</option>
+                  <option value="Wiraswasta">Wiraswasta</option>
+                  <option value="Karyawan Swasta">Karyawan Swasta</option>
+                  <option value="Buruh">Buruh / Pekerja Lepas</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-slate-400 mb-1 font-semibold">Wilayah / Kode Pos</label>
+                <select
+                  value={kodePos}
+                  onChange={(e) => setKodePos(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white focus:border-blue-500 focus:outline-none"
+                >
+                  <option value="Jakarta">Jakarta (Wilayah 1)</option>
+                  <option value="Bandung">Bandung (Wilayah 2)</option>
+                  <option value="Surabaya">Surabaya (Wilayah 3)</option>
+                  <option value="Medan">Medan (Wilayah 4)</option>
+                  <option value="Makassar">Makassar (Wilayah 5)</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          {/* 2. Parameter Finansial */}
+          <div>
+            <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider mb-3 flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-indigo-400"></span>
+              2. Parameter Finansial & Pinjaman
+            </h4>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-slate-400 mb-1 font-semibold">Pendapatan Bulanan (Rp)</label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="0"
+                  value={formatRupiahInputValue(income)}
+                  onChange={(e) => setIncome(parseRupiahInputValue(e.target.value))}
+                  className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white font-mono focus:border-blue-500 focus:outline-none"
+                />
+                <span className="text-[10px] text-slate-500 mt-0.5 block">{formatRupiah(income)}</span>
+              </div>
+              <div>
+                <label className="block text-slate-400 mb-1 font-semibold">Plafon Pinjaman (Rp)</label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="0"
+                  value={formatRupiahInputValue(jumlahPinjaman)}
+                  onChange={(e) => setJumlahPinjaman(parseRupiahInputValue(e.target.value))}
+                  className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white font-mono focus:border-blue-500 focus:outline-none"
+                />
+                <span className="text-[10px] text-slate-500 mt-0.5 block">{formatRupiah(jumlahPinjaman)}</span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-3">
+              <div>
+                <label className="block text-slate-400 mb-1 font-semibold">Tenor (Bulan)</label>
+                <select
+                  value={durasiPinjaman}
+                  onChange={(e) => setDurasiPinjaman(Number(e.target.value))}
+                  className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white focus:border-blue-500 focus:outline-none"
+                >
+                  <option value={12}>12 Bulan</option>
+                  <option value={24}>24 Bulan</option>
+                  <option value={36}>36 Bulan</option>
+                  <option value={48}>48 Bulan</option>
+                  <option value={60}>60 Bulan</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-slate-400 mb-1 font-semibold">Nilai Agunan (Rp)</label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="0"
+                  value={formatRupiahInputValue(nilaiAgunan)}
+                  onChange={(e) => setNilaiAgunan(parseRupiahInputValue(e.target.value))}
+                  className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white font-mono focus:border-blue-500 focus:outline-none"
+                />
+                <span className="text-[10px] text-slate-500 mt-0.5 block">{formatRupiah(nilaiAgunan)}</span>
+              </div>
+              <div>
+                <label className="block text-slate-400 mb-1 font-semibold">Cicilan Lain (Rp/bln)</label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="0"
+                  value={formatRupiahInputValue(cicilanLain)}
+                  onChange={(e) => setCicilanLain(parseRupiahInputValue(e.target.value))}
+                  className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white font-mono focus:border-blue-500 focus:outline-none"
+                />
+                <span className="text-[10px] text-slate-500 mt-0.5 block">{formatRupiah(cicilanLain)}</span>
+              </div>
+            </div>
+
+            <div className="mt-3">
+              <label className="block text-slate-400 mb-1 font-semibold">DPD (Hari Tunggakan)</label>
+              <input
+                type="number"
+                min="0"
+                max="120"
+                value={dpd}
+                onChange={(e) => setDpd(Number(e.target.value) || 0)}
+                className="w-full sm:w-1/3 bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white font-mono focus:border-blue-500 focus:outline-none"
+              />
+            </div>
+          </div>
+
+          {/* 3. Live Preview Hasil Kalkulasi & ML */}
+          <div className="p-4 rounded-xl bg-slate-950 border border-slate-800">
+            <span className="text-[11px] font-bold text-slate-300 uppercase tracking-wider block mb-2">
+              Kalkulasi Otomatis & Prediksi ML (Live Recalculate)
+            </span>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div>
+                <span className="text-[10px] text-slate-500 block">Angsuran / Bln</span>
+                <span className="font-bold text-white font-mono text-xs">{formatRupiah(angsuranBulanan)}</span>
+              </div>
+              <div>
+                <span className="text-[10px] text-slate-500 block">Rasio DSR / LTV</span>
+                <span className="font-bold text-slate-200 font-mono text-xs">
+                  {(calculatedDSR * 100).toFixed(1)}% / {(calculatedLTV * 100).toFixed(1)}%
+                </span>
+              </div>
+              <div>
+                <span className="text-[10px] text-slate-500 block">Prediksi ML PD%</span>
+                <span
+                  className={`font-black font-mono text-xs ${
+                    calculatedPD > 0.65 ? 'text-rose-400' : calculatedPD >= 0.35 ? 'text-amber-400' : 'text-emerald-400'
+                  }`}
+                >
+                  {(calculatedPD * 100).toFixed(1)}%
+                </span>
+              </div>
+              <div>
+                <span className="text-[10px] text-slate-500 block">Rekomendasi AI</span>
+                <span
+                  className={`px-2 py-0.5 rounded text-[10px] font-bold inline-block ${
+                    mlRecommendation === 'ACCEPT'
+                      ? 'bg-emerald-950 text-emerald-400 border border-emerald-800'
+                      : mlRecommendation === 'MANUAL_REVIEW'
+                      ? 'bg-amber-950 text-amber-400 border border-amber-800'
+                      : 'bg-rose-950 text-rose-400 border border-rose-800'
+                  }`}
+                >
+                  {mlRecommendation}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* 4. Keputusan & Catatan Credit Analyst */}
+          <div>
+            <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider mb-3 flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+              3. Keputusan & Catatan Credit Analyst
+            </h4>
+
+            <div className="space-y-3">
+              <div>
+                <label className="block text-slate-400 mb-1.5 font-semibold">Pilih Keputusan Analis:</label>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setAnalystDecision('APPROVED')}
+                    className={`py-2.5 px-4 rounded-xl font-bold flex items-center justify-center gap-2 transition cursor-pointer border ${
+                      analystDecision === 'APPROVED'
+                        ? 'bg-emerald-600 text-white border-emerald-500 shadow-lg shadow-emerald-950'
+                        : 'bg-slate-950 text-slate-400 border-slate-800 hover:border-slate-700'
+                    }`}
+                  >
+                    <CheckCircle2 className="w-4 h-4" />
+                    APPROVE (DISETUJUI)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAnalystDecision('REJECTED')}
+                    className={`py-2.5 px-4 rounded-xl font-bold flex items-center justify-center gap-2 transition cursor-pointer border ${
+                      analystDecision === 'REJECTED'
+                        ? 'bg-rose-600 text-white border-rose-500 shadow-lg shadow-rose-950'
+                        : 'bg-slate-950 text-slate-400 border-slate-800 hover:border-slate-700'
+                    }`}
+                  >
+                    <XCircle className="w-4 h-4" />
+                    REJECT (DITOLAK)
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-400 mb-1 font-semibold">Petugas Analis</label>
+                  <input
+                    type="text"
+                    value={analystOfficer}
+                    onChange={(e) => setAnalystOfficer(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white focus:border-blue-500 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-400 mb-1 font-semibold">Waktu Update Terakhir</label>
+                  <input
+                    type="text"
+                    disabled
+                    value={new Date().toLocaleString('id-ID')}
+                    className="w-full bg-slate-950/60 border border-slate-800 rounded-lg px-3 py-2 text-slate-500 font-mono"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-slate-400 mb-1 font-semibold">Catatan Justifikasi Analis</label>
+                <textarea
+                  rows={3}
+                  value={analystNotes}
+                  onChange={(e) => setAnalystNotes(e.target.value)}
+                  placeholder="Masukkan catatan pertimbangan atau mitigasi risiko..."
+                  className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-white focus:border-blue-500 focus:outline-none resize-none"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Modal Footer Actions */}
+          <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-800">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl font-semibold transition cursor-pointer"
+            >
+              Batal
+            </button>
+            <button
+              type="submit"
+              className="px-5 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-bold flex items-center gap-2 shadow-lg shadow-blue-950 transition cursor-pointer"
+            >
+              <Check className="w-4 h-4" />
+              Simpan Perubahan
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
 };
 
 export const CreditApplicationView: React.FC = () => {
@@ -58,6 +469,10 @@ export const CreditApplicationView: React.FC = () => {
 
   // Stored Applications
   const [applications, setApplications] = useState<CreditApplication[]>([]);
+
+  // Edit & Delete Modal States
+  const [editingApp, setEditingApp] = useState<CreditApplication | null>(null);
+  const [appToDelete, setAppToDelete] = useState<CreditApplication | null>(null);
 
   // Load from localStorage or initialize with sensible sample
   useEffect(() => {
@@ -293,6 +708,25 @@ export const CreditApplicationView: React.FC = () => {
     setTimeout(() => {
       setSuccessMessage(null);
     }, 6000);
+  };
+
+  // Handler simpan perubahan data pengajuan (Edit)
+  const handleSaveEditedApp = (updatedApp: CreditApplication) => {
+    const updatedList = applications.map((a) => (a.id === updatedApp.id ? updatedApp : a));
+    saveApplications(updatedList);
+    setEditingApp(null);
+    setSuccessMessage(`Perubahan pengajuan ${updatedApp.id} (${updatedApp.nama}) berhasil disimpan.`);
+    setTimeout(() => setSuccessMessage(null), 5000);
+  };
+
+  // Handler hapus data pengajuan (Delete)
+  const handleConfirmDeleteApp = (id: string) => {
+    const target = applications.find((a) => a.id === id);
+    const updatedList = applications.filter((a) => a.id !== id);
+    saveApplications(updatedList);
+    setAppToDelete(null);
+    setSuccessMessage(`Data pengajuan ${target?.id || id} (${target?.nama || ''}) telah berhasil dihapus.`);
+    setTimeout(() => setSuccessMessage(null), 5000);
   };
 
   // Filtered History
@@ -862,13 +1296,14 @@ export const CreditApplicationView: React.FC = () => {
                 <th className="p-3">Rekomendasi AI</th>
                 <th className="p-3">Keputusan Analis</th>
                 <th className="p-3">Catatan Analis</th>
+                <th className="p-3 text-center">Aksi</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/60">
               {filteredApps.length > 0 ? (
                 filteredApps.map((app) => {
-                  const isApproved = app.analystDecision === 'APPROVED';
-                  const isRejected = app.analystDecision === 'REJECTED';
+                  const isApproved = app.analyst_decision === 'APPROVED';
+                  const isRejected = app.analyst_decision === 'REJECTED';
                   return (
                     <tr key={app.id} className="hover:bg-slate-800/40 transition">
                       <td className="p-3 font-mono text-[11px] text-slate-300">
@@ -936,12 +1371,32 @@ export const CreditApplicationView: React.FC = () => {
                       <td className="p-3 text-slate-300 text-[11px] max-w-xs truncate" title={app.analyst_notes}>
                         {app.analyst_notes || '-'}
                       </td>
+                      <td className="p-3">
+                        <div className="flex items-center justify-center gap-1.5 whitespace-nowrap">
+                          <button
+                            onClick={() => setEditingApp(app)}
+                            className="px-2.5 py-1 bg-blue-950/70 hover:bg-blue-900/90 text-blue-300 hover:text-white border border-blue-700/60 rounded-md text-xs font-semibold flex items-center gap-1 transition cursor-pointer shadow-sm"
+                            title="Edit data pengajuan atau revisi keputusan analis"
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => setAppToDelete(app)}
+                            className="px-2.5 py-1 bg-rose-950/70 hover:bg-rose-900/90 text-rose-300 hover:text-white border border-rose-700/60 rounded-md text-xs font-semibold flex items-center gap-1 transition cursor-pointer shadow-sm"
+                            title="Hapus riwayat pengajuan kredit ini"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            Delete
+                          </button>
+                        </div>
+                      </td>
                     </tr>
                   );
                 })
               ) : (
                 <tr>
-                  <td colSpan={8} className="text-center py-8 text-slate-500">
+                  <td colSpan={9} className="text-center py-8 text-slate-500">
                     Tidak ada data pengajuan kredit yang sesuai dengan pencarian.
                   </td>
                 </tr>
@@ -950,6 +1405,71 @@ export const CreditApplicationView: React.FC = () => {
           </table>
         </div>
       </div>
+
+      {/* Delete Confirmation Modal */}
+      {appToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-md p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in duration-150">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-xl bg-rose-500/20 text-rose-400 flex items-center justify-center border border-rose-500/30 shrink-0">
+                <Trash2 className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-white">Hapus Data Pengajuan?</h3>
+                <p className="text-xs text-slate-400 font-mono">{appToDelete.id}</p>
+              </div>
+            </div>
+
+            <div className="p-3.5 bg-slate-950 rounded-xl border border-slate-800 text-xs text-slate-300 space-y-1.5">
+              <div className="flex justify-between">
+                <span className="text-slate-500">Nama Debitur:</span>
+                <span className="font-bold text-white">{appToDelete.nama}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Plafon Pinjaman:</span>
+                <span className="font-bold text-slate-200 font-mono">{formatRupiah(appToDelete.jumlah_pinjaman)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Keputusan Analis:</span>
+                <span className={`font-bold ${appToDelete.analyst_decision === 'APPROVED' ? 'text-emerald-400' : 'text-rose-400'}`}>
+                  {appToDelete.analyst_decision}
+                </span>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-400">
+              Apakah Anda yakin ingin menghapus data pengajuan ini dari riwayat? Tindakan ini bersifat permanen dan tidak dapat dibatalkan.
+            </p>
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setAppToDelete(null)}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl font-semibold text-xs transition cursor-pointer"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={() => handleConfirmDeleteApp(appToDelete.id)}
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-xl font-bold text-xs flex items-center gap-1.5 shadow-lg shadow-rose-950 transition cursor-pointer"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                Ya, Hapus Data
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Application Modal */}
+      {editingApp && (
+        <EditApplicationModal
+          app={editingApp}
+          onClose={() => setEditingApp(null)}
+          onSave={handleSaveEditedApp}
+        />
+      )}
     </div>
   );
 };
