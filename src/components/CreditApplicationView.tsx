@@ -22,6 +22,17 @@ import { formatRupiah, formatPercent } from '../utils/aiEthicsEngine';
 const STORAGE_KEY_APPLICATIONS = 'bri_credit_applications_v1';
 const OFFICER_NAME = 'Barnacle Boy';
 
+// Helper pemisah nominal rupiah titik (contoh: 600000 -> 600.000, 1000000 -> 1.000.000)
+export const formatRupiahInputValue = (val: number): string => {
+  if (val === 0) return '';
+  return val.toLocaleString('id-ID');
+};
+
+export const parseRupiahInputValue = (str: string): number => {
+  const digitsOnly = str.replace(/\D/g, '');
+  return digitsOnly ? parseInt(digitsOnly, 10) : 0;
+};
+
 export const CreditApplicationView: React.FC = () => {
   // Form State
   const [cif, setCif] = useState<string>('CIF-2026-0891');
@@ -401,10 +412,11 @@ export const CreditApplicationView: React.FC = () => {
                   Pendapatan Bulanan (Rp)
                 </label>
                 <input
-                  type="number"
-                  step="500000"
-                  value={income}
-                  onChange={(e) => setIncome(Number(e.target.value) || 0)}
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="0"
+                  value={formatRupiahInputValue(income)}
+                  onChange={(e) => setIncome(parseRupiahInputValue(e.target.value))}
                   className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white font-mono focus:border-blue-500 focus:outline-none"
                 />
                 <span className="text-[10px] text-slate-500 mt-0.5 block">{formatRupiah(income)}</span>
@@ -432,10 +444,11 @@ export const CreditApplicationView: React.FC = () => {
                   Jumlah Pinjaman / Plafon (Rp)
                 </label>
                 <input
-                  type="number"
-                  step="1000000"
-                  value={jumlahPinjaman}
-                  onChange={(e) => setJumlahPinjaman(Number(e.target.value) || 0)}
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="0"
+                  value={formatRupiahInputValue(jumlahPinjaman)}
+                  onChange={(e) => setJumlahPinjaman(parseRupiahInputValue(e.target.value))}
                   className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white font-mono focus:border-blue-500 focus:outline-none"
                 />
                 <span className="text-[10px] text-slate-500 mt-0.5 block">
@@ -465,10 +478,11 @@ export const CreditApplicationView: React.FC = () => {
                   Nilai Agunan / Jaminan (Rp)
                 </label>
                 <input
-                  type="number"
-                  step="1000000"
-                  value={nilaiAgunan}
-                  onChange={(e) => setNilaiAgunan(Number(e.target.value) || 0)}
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="0"
+                  value={formatRupiahInputValue(nilaiAgunan)}
+                  onChange={(e) => setNilaiAgunan(parseRupiahInputValue(e.target.value))}
                   className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white font-mono focus:border-blue-500 focus:outline-none"
                 />
                 <span className="text-[10px] text-slate-500 mt-0.5 block">
@@ -480,10 +494,11 @@ export const CreditApplicationView: React.FC = () => {
                   Cicilan Utang Lain (Rp/bln)
                 </label>
                 <input
-                  type="number"
-                  step="100000"
-                  value={cicilanLain}
-                  onChange={(e) => setCicilanLain(Number(e.target.value) || 0)}
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="0"
+                  value={formatRupiahInputValue(cicilanLain)}
+                  onChange={(e) => setCicilanLain(parseRupiahInputValue(e.target.value))}
                   className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white font-mono focus:border-blue-500 focus:outline-none"
                 />
                 <span className="text-[10px] text-slate-500 mt-0.5 block">
