@@ -1,310 +1,200 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import Papa from 'papaparse';
-import { 
-  Building2, 
-  Upload, 
-  Database, 
-  AlertCircle, 
-  CheckCircle2, 
-  ShieldAlert,
-  ArrowRight,
-  Sparkles
-} from 'lucide-react';
-import { RawCreditRecord, CreditRecord, CleaningStats, DatasetSummary, ActivePage } from './types';
-import { cleanCreditData } from './utils/creditEngine';
-import { Sidebar } from './components/Sidebar';
+import { ActivePage, DebtorRecord } from './types';
 import { Header } from './components/Header';
-import { FileUploadModal } from './components/FileUploadModal';
-import { DashboardView } from './components/DashboardView';
-import { DataExplorerView } from './components/DataExplorerView';
-import { RiskAnalysisView } from './components/RiskAnalysisView';
-import { PortfolioAnalysisView } from './components/PortfolioAnalysisView';
-import { DataCleaningView } from './components/DataCleaningView';
-import { ExportDataView } from './components/ExportDataView';
+import { Sidebar } from './components/Sidebar';
+import { ModelEthicsDashboardView } from './components/ModelEthicsDashboardView';
+import { CreditApplicationView } from './components/CreditApplicationView';
+import { loadInitialDebtors } from './utils/dataLoader';
+import { SAMPLE_DEBTORS } from './data/sampleDebtors';
+import { calculateDebtorPD } from './utils/aiEthicsEngine';
 
-const STORAGE_KEY_RAW = 'bri_credit_raw_dataset_v1';
-const STORAGE_KEY_SUMMARY = 'bri_credit_summary_v1';
-
-function saveDatasetToStorage(raw: RawCreditRecord[], summary: DatasetSummary) {
-  try {
-    localStorage.setItem(STORAGE_KEY_RAW, JSON.stringify(raw));
-    localStorage.setItem(STORAGE_KEY_SUMMARY, JSON.stringify(summary));
-  } catch (err) {
-    console.warn('Gagal menyimpan dataset ke localStorage (mungkin melebihi kuota kuota):', err);
-  }
-}
-
-function loadDatasetFromStorage(): { raw: RawCreditRecord[]; summary: DatasetSummary } | null {
-  try {
-    const rawStr = localStorage.getItem(STORAGE_KEY_RAW);
-    const summaryStr = localStorage.getItem(STORAGE_KEY_SUMMARY);
-    if (!rawStr || !summaryStr) return null;
-    const raw = JSON.parse(rawStr);
-    const summary = JSON.parse(summaryStr);
-    if (Array.isArray(raw) && raw.length > 0 && summary && summary.fileName) {
-      return { raw, summary };
-    }
-  } catch (err) {
-    console.warn('Gagal membaca dataset tersimpan dari localStorage:', err);
-  }
-  return null;
-}
-
-function clearDatasetFromStorage() {
-  try {
-    localStorage.removeItem(STORAGE_KEY_RAW);
-    localStorage.removeItem(STORAGE_KEY_SUMMARY);
-  } catch (err) {
-    console.warn('Gagal membersihkan dataset dari localStorage:', err);
-  }
-}
+const STORAGE_KEY_CUSTOM_DEBTORS = 'bri_custom_debtors_dataset_v1';
+const DEFAULT_OFFICER_NAME = 'Barnacle Boy';
 
 export default function App() {
   const [activePage, setActivePage] = useState<ActivePage>('dashboard');
-  const [rawRecords, setRawRecords] = useState<RawCreditRecord[]>([]);
-  const [cleanedRecords, setCleanedRecords] = useState<CreditRecord[]>([]);
-  const [cleaningStats, setCleaningStats] = useState<CleaningStats | null>(null);
-  const [datasetSummary, setDatasetSummary] = useState<DatasetSummary | null>(null);
-  const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const [debtors, setDebtors] = useState<DebtorRecord[]>(SAMPLE_DEBTORS);
+  const [thresholdAccept, setThresholdAccept] = useState<number>(0.35);
+  const [thresholdReject, setThresholdReject] = useState<number>(0.65);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isCustomLoaded, setIsCustomLoaded] = useState<boolean>(false);
 
-  // Process raw records through data cleaning engine
-  const handleDataLoaded = useCallback((raw: RawCreditRecord[], summary: DatasetSummary, persist = true) => {
-    setRawRecords(raw);
-    setDatasetSummary(summary);
-    
-    if (persist) {
-      saveDatasetToStorage(raw, summary);
+  // Load dataset on initial mount
+  useEffect(() => {
+    async function initData() {
+      setIsLoading(true);
+      // Check localStorage first for uploaded dataset
+      try {
+        const cached = localStorage.getItem(STORAGE_KEY_CUSTOM_DEBTORS);
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setDebtors(parsed);
+            setIsCustomLoaded(true);
+            setIsLoading(false);
+            return;
+          }
+        }
+      } catch (err) {
+        console.warn('Gagal membaca custom dataset dari localStorage:', err);
+      }
+
+      // Load full 10,000 dataset
+      try {
+        const loaded = await loadInitialDebtors();
+        if (loaded && loaded.length > 0) {
+          setDebtors(loaded);
+        }
+      } catch (err) {
+        console.error('Gagal memuat dataset utama, fallback ke sample:', err);
+      } finally {
+        setIsLoading(false);
+      }
     }
-    
-    // Run cleaning engine
-    const { cleanedRecords: cleaned, stats } = cleanCreditData(raw);
-    setCleanedRecords(cleaned);
-    setCleaningStats(stats);
-    setLoadError(null);
+
+    initData();
   }, []);
 
-  // Load sample dataset (data_kredit_bri.csv)
-  const handleLoadSample = useCallback(async (persist = true) => {
-    setIsLoading(true);
-    setLoadError(null);
-    try {
-      const response = await fetch('/data_kredit_bri.csv');
-      if (!response.ok) {
-        throw new Error('Gagal mengambil file sample dataset.');
-      }
-      const csvText = await response.text();
-      
-      Papa.parse(csvText, {
-        header: true,
-        skipEmptyLines: 'greedy',
-        complete: (results) => {
-          const raw = results.data as RawCreditRecord[];
-          const headers = results.meta.fields || Object.keys(raw[0] || {});
+  // Handle custom CSV File Upload
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
 
-          const columnTypes: { [col: string]: string } = {};
-          const missingValues: { [col: string]: number } = {};
-          const uniqueValues: { [col: string]: number } = {};
+    Papa.parse(file, {
+      header: true,
+      skipEmptyLines: 'greedy',
+      complete: (results) => {
+        try {
+          const raw = results.data as any[];
+          if (!raw || raw.length === 0) return;
 
-          headers.forEach(h => {
-            let nullCount = 0;
-            const valSet = new Set<string>();
-            let numericCount = 0;
+          const parsedDebtors: DebtorRecord[] = raw.map((row, idx) => {
+            const income = Number(row.income) || 5000000;
+            const usia = Number(row.usia) || 35;
+            const durasi = Number(row.durasi_pinjaman) || 24;
+            const pinjaman = Number(row.jumlah_pinjaman) || 25000000;
+            const dsr = Number(row.dsr) || 0.25;
+            const ltv = Number(row.ltv) || 0.45;
+            const dpd = Number(row.dpd) || 0;
+            const status_pekerjaan = row.status_pekerjaan || 'Lainnya';
+            const kode_pos = row.kode_pos || 'Lainnya';
+            const default_val = row.default !== undefined ? Number(row.default) : 0;
 
-            raw.forEach(row => {
-              const val = row[h];
-              if (val === null || val === undefined || String(val).trim() === '') {
-                nullCount++;
-              } else {
-                valSet.add(String(val));
-                if (!isNaN(Number(String(val).replace(/rp/gi, '').replace(/\./g, '').replace(',', '.')))) {
-                  numericCount++;
-                }
-              }
-            });
+            const res = calculateDebtorPD(dpd, usia, income, durasi, dsr, ltv);
+            let proba = Number(row.proba_default);
+            if (isNaN(proba) || proba === 0) {
+              proba = res.probaDefault;
+            }
 
-            missingValues[h] = nullCount;
-            uniqueValues[h] = valSet.size;
-            columnTypes[h] = numericCount > (raw.length - nullCount) * 0.7 ? 'Float/Numeric' : 'Object/String';
+            const rec: 'ACCEPT' | 'MANUAL_REVIEW' | 'REJECT' =
+              proba > 0.65 ? 'REJECT' : proba >= 0.35 ? 'MANUAL_REVIEW' : 'ACCEPT';
+
+            return {
+              id_nasabah: row.id_nasabah || `CIF-UP-${String(idx + 1).padStart(5, '0')}`,
+              nama_nasabah: row.nama_nasabah || `Nasabah Upload #${idx + 1}`,
+              income,
+              usia,
+              durasi_pinjaman: durasi,
+              jumlah_pinjaman: pinjaman,
+              dsr,
+              ltv,
+              dpd,
+              status_pekerjaan,
+              kode_pos,
+              default: default_val,
+              risk_score: res.riskScore,
+              proba_default: proba,
+              pred_default: proba >= 0.50 ? 1 : 0,
+              decision_recommendation: rec,
+              human_decision: 'PENDING'
+            };
           });
 
-          const branchCol = headers.find(h => h.toLowerCase().includes('cabang')) || 'nama_cabang';
-          const statusCol = headers.find(h => h.toLowerCase().includes('status')) || 'status_kredit';
-          const segmentCol = headers.find(h => h.toLowerCase().includes('segmen')) || 'segmen';
-          const dateCol = headers.find(h => h.toLowerCase().includes('tanggal') || h.toLowerCase().includes('akad'));
+          setDebtors(parsedDebtors);
+          setIsCustomLoaded(true);
 
-          const branches = Array.from(new Set(raw.map(r => String(r[branchCol] || '').trim()).filter(Boolean)));
-          const statuses = Array.from(new Set(raw.map(r => String(r[statusCol] || '').trim()).filter(Boolean)));
-          const segments = Array.from(new Set(raw.map(r => String(r[segmentCol] || '').trim()).filter(Boolean)));
-
-          const summary: DatasetSummary = {
-            fileName: 'data_kredit_bri.csv',
-            fileSize: csvText.length,
-            totalRows: raw.length,
-            totalColumns: headers.length,
-            columnNames: headers,
-            columnTypes,
-            missingValues,
-            uniqueValues,
-            branches,
-            statuses,
-            segments,
-            hasEAD: headers.some(h => h.toUpperCase() === 'EAD'),
-            hasLGD: headers.some(h => h.toUpperCase() === 'LGD'),
-            hasDate: !!dateCol,
-            dateColumnName: dateCol
-          };
-
-          handleDataLoaded(raw, summary, persist);
-          setIsLoading(false);
-        },
-        error: (err) => {
-          setLoadError(`Gagal parse CSV: ${err.message}`);
-          setIsLoading(false);
+          // Persist in localStorage so it does not reset on browser reload
+          try {
+            localStorage.setItem(STORAGE_KEY_CUSTOM_DEBTORS, JSON.stringify(parsedDebtors));
+          } catch (err) {
+            console.warn('Penyimpanan localStorage penuh:', err);
+          }
+        } catch (err) {
+          alert('Format CSV tidak sesuai. Pastikan memiliki kolom income, usia, durasi_pinjaman, dll.');
         }
-      });
-    } catch (err: any) {
-      setLoadError(err.message || 'Terjadi kesalahan saat memuat dataset.');
-      setIsLoading(false);
-    }
-  }, [handleDataLoaded]);
+      },
+      error: (err) => {
+        alert(`Gagal parse CSV: ${err.message}`);
+      }
+    });
 
-  // Check localStorage first on startup so user uploads persist across refreshes
-  useEffect(() => {
-    const saved = loadDatasetFromStorage();
-    if (saved && saved.raw && saved.raw.length > 0 && saved.summary) {
-      handleDataLoaded(saved.raw, saved.summary, false);
-    } else {
-      handleLoadSample(false);
-    }
-  }, [handleDataLoaded, handleLoadSample]);
+    e.target.value = '';
+  };
 
-  // Reset to default dataset and remove local storage
-  const handleResetDefault = useCallback(() => {
-    clearDatasetFromStorage();
-    handleLoadSample(false);
-  }, [handleLoadSample]);
+  // Reset to default 10,000 dataset
+  const handleResetData = async () => {
+    try {
+      localStorage.removeItem(STORAGE_KEY_CUSTOM_DEBTORS);
+    } catch (err) {
+      console.warn(err);
+    }
+    setIsCustomLoaded(false);
+    setIsLoading(true);
+    const loaded = await loadInitialDebtors();
+    setDebtors(loaded);
+    setIsLoading(false);
+  };
+
+  // Metrics for Sidebar Threshold Distribution
+  const acceptCount = debtors.filter((d) => d.proba_default < thresholdAccept).length;
+  const manualCount = debtors.filter(
+    (d) => d.proba_default >= thresholdAccept && d.proba_default <= thresholdReject
+  ).length;
+  const rejectCount = debtors.filter((d) => d.proba_default > thresholdReject).length;
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-[#020617] font-sans text-slate-200 antialiased">
-      {/* Sidebar Navigation */}
-      <Sidebar
+    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-blue-600 selection:text-white">
+      {/* Top Header */}
+      <Header
+        totalDebtors={debtors.length}
         activePage={activePage}
-        setActivePage={setActivePage}
-        datasetSummary={datasetSummary}
-        onOpenUpload={() => setIsUploadModalOpen(true)}
+        onNavigate={(page) => setActivePage(page)}
+        onResetData={handleResetData}
+        onFileUpload={handleFileUpload}
+        currentUser={DEFAULT_OFFICER_NAME}
+        isCustomLoaded={isCustomLoaded}
       />
 
-      {/* Main App Container */}
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden bg-[#020617]">
-        {/* Header */}
-        <Header
-          datasetSummary={datasetSummary}
-          onOpenUpload={() => setIsUploadModalOpen(true)}
-          onLoadSample={() => handleLoadSample(true)}
-          onResetDefault={handleResetDefault}
-          isLoading={isLoading}
+      {/* Main Layout Container */}
+      <div className="flex-1 flex max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 gap-6">
+        {/* Left Sidebar */}
+        <Sidebar
+          activePage={activePage}
+          onSelectPage={(p) => setActivePage(p)}
+          thresholdAccept={thresholdAccept}
+          setThresholdAccept={setThresholdAccept}
+          thresholdReject={thresholdReject}
+          setThresholdReject={setThresholdReject}
+          acceptCount={acceptCount}
+          manualCount={manualCount}
+          rejectCount={rejectCount}
         />
 
-        {/* Dynamic Page Content */}
-        <main className="flex-1 overflow-y-auto p-6 md:p-8">
-          {datasetSummary && cleanedRecords.length > 0 ? (
-            <div className="max-w-7xl mx-auto space-y-6">
-              {activePage === 'dashboard' && (
-                <DashboardView
-                  records={cleanedRecords}
-                  summary={datasetSummary}
-                  setActivePage={setActivePage}
-                />
-              )}
-              {activePage === 'data-explorer' && (
-                <DataExplorerView
-                  records={cleanedRecords}
-                  summary={datasetSummary}
-                />
-              )}
-              {(activePage === 'risk-analysis' || activePage === 'risiko' || activePage === 'visualisasi-risiko') && (
-                <RiskAnalysisView
-                  records={cleanedRecords}
-                  summary={datasetSummary}
-                />
-              )}
-              {activePage === 'portfolio-analysis' && (
-                <PortfolioAnalysisView
-                  records={cleanedRecords}
-                  summary={datasetSummary}
-                />
-              )}
-              {activePage === 'data-cleaning' && (
-                <DataCleaningView
-                  records={cleanedRecords}
-                  stats={cleaningStats}
-                  summary={datasetSummary}
-                />
-              )}
-              {activePage === 'export-data' && (
-                <ExportDataView
-                  records={cleanedRecords}
-                  summary={datasetSummary}
-                />
-              )}
-            </div>
-          ) : (
-            /* Empty State: Dataset not loaded yet */
-            <div className="max-w-3xl mx-auto mt-12 bg-[#0f172a] rounded-3xl p-10 border border-slate-800 shadow-2xl text-center">
-              <div className="w-16 h-16 rounded-2xl bg-blue-600/10 text-blue-400 flex items-center justify-center mx-auto mb-4 border border-blue-500/20">
-                <Database className="w-8 h-8" />
-              </div>
-              <h2 className="text-xl font-bold text-white">
-                Silakan upload dataset terlebih dahulu
-              </h2>
-              <p className="text-sm text-slate-400 mt-2 max-w-md mx-auto">
-                Untuk memulai analisis portofolio risiko kredit BFLP BRI, silakan upload file 
-                <code className="font-mono text-blue-400 bg-slate-900 px-1.5 py-0.5 rounded mx-1 border border-slate-800">data_kredit_bri.csv</code> 
-                atau gunakan dataset bawaan.
-              </p>
+        {/* Center Main Content Body */}
+        <main className="flex-1 min-w-0">
+          {activePage === 'dashboard' && (
+            <ModelEthicsDashboardView
+              debtors={debtors}
+              onNavigateToCreditApp={() => setActivePage('pengajuan-kredit')}
+            />
+          )}
 
-              {loadError && (
-                <div className="mt-4 p-3 bg-rose-500/10 border border-rose-500/30 rounded-xl text-xs text-rose-400 font-medium flex items-center justify-center gap-2">
-                  <AlertCircle className="w-4 h-4" />
-                  <span>{loadError}</span>
-                </div>
-              )}
-
-              <div className="mt-6 flex flex-col sm:flex-row items-center justify-center gap-3">
-                <button
-                  id="btn-empty-load-sample"
-                  onClick={handleLoadSample}
-                  disabled={isLoading}
-                  className="w-full sm:w-auto px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-semibold shadow-lg shadow-blue-600/20 flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-50"
-                >
-                  <Sparkles className="w-4 h-4" />
-                  <span>{isLoading ? 'Memuat Dataset...' : 'Muat Dataset data_kredit_bri.csv'}</span>
-                </button>
-
-                <button
-                  id="btn-empty-upload"
-                  onClick={() => setIsUploadModalOpen(true)}
-                  className="w-full sm:w-auto px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition-colors cursor-pointer"
-                >
-                  <Upload className="w-4 h-4" />
-                  <span>Upload File CSV Sendiri</span>
-                </button>
-              </div>
-            </div>
+          {activePage === 'pengajuan-kredit' && (
+            <CreditApplicationView />
           )}
         </main>
       </div>
-
-      {/* File Upload Modal */}
-      <FileUploadModal
-        isOpen={isUploadModalOpen}
-        onClose={() => setIsUploadModalOpen(false)}
-        onDataLoaded={handleDataLoaded}
-        onLoadSample={handleLoadSample}
-        isLoading={isLoading}
-      />
     </div>
   );
 }

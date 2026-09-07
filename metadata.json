@@ -1,6 +1,6 @@
 {
   "name": "BRI Credit Risk Management Dashboard",
-  "description": "Data Driven Risk Management Dashboard BFLP - Hari 2 Sesi 2: Pandas Fondasi Data Analysis untuk Anandafa Syukur Rizky",
+  "description": "Dashboard Risk Management BRI: Responsible AI yang Etis & Transparan (Hari 7: SHAP, LIME, Bias ML, Mitigasi Reweighing, Human-in-the-Loop & OJK AI Governance)",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

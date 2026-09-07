@@ -1,0 +1,202 @@
+const fs = require('fs');
+
+// We have the notebook content from user's message
+// Let's create a clean, complete notebook with all steps B-1, B-2, Langkah 2, Langkah 3, Langkah 4
+const nb = {
+ "cells": [
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "# DASHBOARD RISK MANAGEMENT BRI: RESPONSIBLE AI YANG ETIS & TRANSPARAN\n",
+    "## BFLP Hari 7: SHAP, LIME, Bias ML, Prinsip Etika ML (5 Pilar Bank BRI)\n",
+    "### Tugas Terpadu: Langkah 1 s.d. Langkah 4 & Laporan Kepatuhan OJK/BI"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## **TUGAS B-1**\n",
+    "Langkah 1: SHAP & LIME, Sumber & Mitigasi Bias ML, Prinsip Etika ML\n",
+    "- 5 Pilar Bank BRI: Fairness, Explainability, Accountability, Transparency, Privacy & Security\n",
+    "- 3 Prinsip OJK Tata Kelola AI Perbankan Indonesia: Keadilan Non-Diskriminatif, Keterjelasan Algoritma, Pengawasan Manusia (Human-in-the-Loop)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## **TUGAS B-2**\n",
+    "Langkah 2: Analisis Bias pada Model Prediksi Gagal Bayar"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 1,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "import numpy as np\n",
+    "import pandas as pd\n",
+    "import matplotlib.pyplot as plt\n",
+    "import seaborn as sns\n",
+    "import warnings\n",
+    "warnings.filterwarnings('ignore')\n",
+    "\n",
+    "from sklearn.model_selection import train_test_split\n",
+    "from sklearn.ensemble import RandomForestClassifier\n",
+    "from sklearn.metrics import roc_curve, auc, confusion_matrix, classification_report\n",
+    "from xgboost import XGBClassifier\n",
+    "\n",
+    "pd.set_option('display.max_columns', None)\n",
+    "plt.rcParams['figure.dpi'] = 100\n",
+    "RANDOM_STATE = 42"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## 0. Load & Inspeksi Data 10.000 Debitur BRI"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 2,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "try:\n",
+    "    df = pd.read_csv('dummy_credit_risk_BRI_10000_clean_imbalanced.csv')\n",
+    "except Exception:\n",
+    "    df = pd.read_csv('public/dummy_credit_risk_BRI_10000_clean_imbalanced.csv')\n",
+    "print('Shape:', df.shape)\n",
+    "df.head()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## 1. Pelatihan Model: Random Forest vs XGBoost"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 3,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "cat_cols = ['status_pekerjaan', 'kode_pos']\n",
+    "num_cols = ['income', 'dsr', 'ltv', 'dpd', 'durasi_pinjaman', 'usia']\n",
+    "X = pd.get_dummies(df[num_cols + cat_cols], columns=cat_cols, drop_first=False)\n",
+    "y = df['default']\n",
+    "\n",
+    "X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, stratify=y, random_state=RANDOM_STATE)\n",
+    "\n",
+    "rf = RandomForestClassifier(n_estimators=300, max_depth=6, class_weight='balanced', random_state=RANDOM_STATE, n_jobs=-1)\n",
+    "rf.fit(X_train, y_train)\n",
+    "\n",
+    "xgb = XGBClassifier(n_estimators=300, max_depth=4, learning_rate=0.05, subsample=0.8, colsample_bytree=0.8, eval_metric='logloss', random_state=RANDOM_STATE)\n",
+    "xgb.fit(X_train, y_train)\n",
+    "print('Model training selesai!')"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## 2. Audit Fairness dengan AIF360: Disparate Impact & Mean Difference"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 4,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "from aif360.datasets import BinaryLabelDataset\n",
+    "from aif360.metrics import BinaryLabelDatasetMetric\n",
+    "\n",
+    "def hitung_fairness(sub_df, label_col, privileged_grp, unprivileged_grp, protected_attr='status_pekerjaan'):\n",
+    "    d = sub_df[[label_col]].copy()\n",
+    "    d[protected_attr] = (sub_df[protected_attr] == privileged_grp).astype(int)\n",
+    "    dataset = BinaryLabelDataset(df=d, label_names=[label_col], protected_attribute_names=[protected_attr], favorable_label=0, unfavorable_label=1)\n",
+    "    metric = BinaryLabelDatasetMetric(dataset, privileged_groups=[{protected_attr: 1}], unprivileged_groups=[{protected_attr: 0}])\n",
+    "    return metric.disparate_impact(), metric.mean_difference()\n",
+    "\n",
+    "df_pred = df.copy()\n",
+    "df_pred['default_pred'] = xgb.predict(X[X.columns])\n",
+    "\n",
+    "hasil = []\n",
+    "for grp in ['Buruh', 'Lainnya', 'Wiraswasta']:\n",
+    "    sub_hist = df[df['status_pekerjaan'].isin(['PNS', grp])]\n",
+    "    sub_pred = df_pred[df_pred['status_pekerjaan'].isin(['PNS', grp])]\n",
+    "    di_h, md_h = hitung_fairness(sub_hist, 'default', 'PNS', grp)\n",
+    "    di_p, md_p = hitung_fairness(sub_pred, 'default_pred', 'PNS', grp)\n",
+    "    hasil.append({'grup': f'PNS vs {grp}', 'DI_hist': di_h, 'DI_pred': di_p, 'MD_hist': md_h, 'MD_pred': md_p})\n",
+    "\n",
+    "hasil_df = pd.DataFrame(hasil)\n",
+    "hasil_df"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## 3. Simulasi Proxy Discrimination via `kode_pos` & Mitigasi Reweighing"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 5,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Injeksi bias lokasi (Jakarta dimaafkan 25%, Lainnya dijatuhkan 25%)\n",
+    "rng = np.random.RandomState(0)\n",
+    "default_injeksi = df['default'].copy()\n",
+    "mask_jkt = (df['kode_pos'] == 'Jakarta') & (default_injeksi == 1)\n",
+    "default_injeksi[mask_jkt & (rng.rand(len(df)) < 0.25)] = 0\n",
+    "mask_lain = (df['kode_pos'] == 'Lainnya') & (default_injeksi == 0)\n",
+    "default_injeksi[mask_lain & (rng.rand(len(df)) < 0.25)] = 1\n",
+    "\n",
+    "df_inj = df.copy()\n",
+    "df_inj['default_injeksi'] = default_injeksi\n",
+    "print('Simulasi proxy discrimination selesai!')"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## 4. SHAP & LIME Interpretability Report"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 6,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "import shap\n",
+    "from lime.lime_tabular import LimeTabularExplainer\n",
+    "\n",
+    "explainer = shap.TreeExplainer(xgb)\n",
+    "X_sample = X_test.sample(min(1000, len(X_test)), random_state=RANDOM_STATE)\n",
+    "shap_values = explainer(X_sample)\n",
+    "print('SHAP explainer siap!')"
+   ]
+  }
+ ],
+ "metadata": {
+  "language_info": { "name": "python" },
+  "kernelspec": { "display_name": "Python 3", "name": "python3" }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 5
+};
+
+fs.writeFileSync('Risk_Model_BRI_Ethics_Final.ipynb', JSON.stringify(nb, null, 2), 'utf8');
+console.log('Saved Risk_Model_BRI_Ethics_Final.ipynb successfully.');
