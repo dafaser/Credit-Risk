@@ -35,6 +35,12 @@ export const parseRupiahInputValue = (str: string): number => {
   return digitsOnly ? parseInt(digitsOnly, 10) : 0;
 };
 
+// Helper format teks rekomendasi ML (menghilangkan underscore: MANUAL_REVIEW -> MANUAL REVIEW)
+export const formatMLRecommendation = (rec: string): string => {
+  if (rec === 'MANUAL_REVIEW') return 'MANUAL REVIEW';
+  return rec;
+};
+
 // Modal Komponen untuk Edit Data Pengajuan & Keputusan Analis
 interface EditModalProps {
   app: CreditApplication;
@@ -343,7 +349,7 @@ const EditApplicationModal: React.FC<EditModalProps> = ({ app, onClose, onSave }
                       : 'bg-rose-950 text-rose-400 border border-rose-800'
                   }`}
                 >
-                  {mlRecommendation}
+                  {formatMLRecommendation(mlRecommendation)}
                 </span>
               </div>
             </div>
@@ -1127,7 +1133,7 @@ export const CreditApplicationView: React.FC = () => {
                     {mlRecommendation === 'ACCEPT' && <CheckCircle2 className="w-6 h-6 text-emerald-400" />}
                     {mlRecommendation === 'MANUAL_REVIEW' && <Clock className="w-6 h-6 text-amber-400" />}
                     {mlRecommendation === 'REJECT' && <XCircle className="w-6 h-6 text-rose-400" />}
-                    {mlRecommendation}
+                    {formatMLRecommendation(mlRecommendation)}
                   </div>
                 </div>
 
@@ -1349,7 +1355,7 @@ export const CreditApplicationView: React.FC = () => {
                               : 'bg-rose-950 text-rose-400 border border-rose-800'
                           }`}
                         >
-                          {app.ml_recommendation}
+                          {formatMLRecommendation(app.ml_recommendation)}
                         </span>
                       </td>
                       <td className="p-3">

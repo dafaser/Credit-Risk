@@ -946,7 +946,7 @@ export const ModelEthicsDashboardView: React.FC<ModelEthicsDashboardViewProps> =
                       : 'text-emerald-400'
                   }`}
                 >
-                  {(currentDebtor.proba_default * 100).toFixed(1)}% ({currentDebtor.decision_recommendation})
+                  {(currentDebtor.proba_default * 100).toFixed(1)}% ({currentDebtor.decision_recommendation.replace(/_/g, ' ')})
                 </span>
               </div>
             </div>
